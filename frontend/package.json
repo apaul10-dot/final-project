@@ -1,0 +1,32 @@
+{
+  "name": "test-analysis-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "next": "^14.0.0",
+    "axios": "^1.6.0",
+    "react-dropzone": "^14.2.3",
+    "katex": "^0.16.9",
+    "react-katex": "^3.0.1",
+    "tailwindcss": "^3.3.5",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.31"
+  },
+  "devDependencies": {
+    "@types/node": "^20.9.0",
+    "@types/react": "^18.2.37",
+    "@types/react-dom": "^18.2.15",
+    "typescript": "^5.2.2",
+    "eslint": "^8.53.0",
+    "eslint-config-next": "^14.0.0"
+  }
+}
+
