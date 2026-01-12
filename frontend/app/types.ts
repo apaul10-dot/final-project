@@ -2,6 +2,8 @@ export interface TestData {
   test_id: string
   extracted_text: string
   equations: string[]
+  user_answers: Record<string, string>
+  questions: Record<string, string>
   message: string
 }
 
@@ -31,4 +33,6 @@ export interface PracticeAnswer {
   feedback: string
   explanation: string
 }
+
+
 

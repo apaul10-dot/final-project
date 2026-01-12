@@ -11,6 +11,7 @@ export default function Home() {
   const [testData, setTestData] = useState<TestData | null>(null)
   const [mistakes, setMistakes] = useState<Mistake[]>([])
   const [practiceQuestions, setPracticeQuestions] = useState<PracticeQuestionType[]>([])
+  const [generatingPractice, setGeneratingPractice] = useState(false)
 
   const handleUploadComplete = (data: TestData) => {
     setTestData(data)
@@ -19,30 +20,84 @@ export default function Home() {
 
   const handleAnalysisComplete = (analysisMistakes: Mistake[]) => {
     setMistakes(analysisMistakes)
-    // Auto-generate practice questions
-    generatePracticeQuestions(analysisMistakes.map(m => m.id || ''))
+    // Don't auto-generate, wait for user to click button
   }
 
-  const generatePracticeQuestions = async (mistakeIds: string[]) => {
-    if (!testData) return
+  const handleGeneratePractice = async () => {
+    if (mistakes.length === 0) {
+      alert('Please analyze mistakes first before generating practice questions.')
+      return
+    }
+    setGeneratingPractice(true)
+    await generatePracticeQuestions(mistakes)
+    setGeneratingPractice(false)
+  }
+
+  const generatePracticeQuestions = async (mistakes: Mistake[]) => {
+    if (!testData) {
+      alert('Test data not found. Please upload a test first.')
+      return
+    }
+
+    if (mistakes.length === 0) {
+      alert('No mistakes found. Please analyze your test first.')
+      return
+    }
 
     try {
-      const response = await fetch('http://localhost:8000/api/generate-practice', {
+      // Build original questions from mistakes (extract question numbers and answers)
+      const originalQuestions: Record<string, string> = {}
+      mistakes.forEach(m => {
+        if (m.question_number) {
+          const qNum = m.question_number.toString()
+          originalQuestions[qNum] = m.user_answer || m.correct_answer || `Question ${qNum}`
+        }
+      })
+
+      // Check backend connection
+      const healthCheck = await fetch('/health')
+      if (!healthCheck.ok) {
+        throw new Error('Backend server is not responding')
+      }
+
+      const response = await fetch('/api/generate-practice', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           test_id: testData.test_id,
-          mistake_ids: mistakeIds,
+          mistake_ids: mistakes.map(m => m.id || m.question_number?.toString() || ''),
+          mistakes: mistakes.map(m => ({
+            question_number: m.question_number,
+            mistake_description: m.mistake_description,
+            why_wrong: m.why_wrong,
+            how_to_fix: m.how_to_fix,
+            weak_area: m.weak_area,
+            user_answer: m.user_answer,
+            correct_answer: m.correct_answer,
+          })),
+          original_questions: originalQuestions,
         }),
       })
 
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
+        throw new Error(errorData.detail || `Server error: ${response.status}`)
+      }
+
       const data = await response.json()
+      
+      if (!data.questions || data.questions.length === 0) {
+        alert('No practice questions were generated. Please try again.')
+        return
+      }
+
       setPracticeQuestions(data.questions)
       setCurrentStep('practice')
     } catch (error) {
       console.error('Error generating practice questions:', error)
+      alert(`Error generating practice questions: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -51,7 +106,7 @@ export default function Home() {
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            Test Analysis & Practice
+            ExplainIt
           </h1>
           <p className="text-gray-600">
             Upload your tests, identify mistakes, and strengthen your weak areas
@@ -75,10 +130,35 @@ export default function Home() {
         )}
 
         {currentStep === 'analysis' && testData && (
-          <MistakeAnalysis
-            testData={testData}
-            onAnalysisComplete={handleAnalysisComplete}
-          />
+          <>
+            <MistakeAnalysis
+              testData={testData}
+              onAnalysisComplete={handleAnalysisComplete}
+            />
+            {mistakes.length > 0 && (
+              <div className="mt-4 flex justify-center">
+                <button
+                  onClick={handleGeneratePractice}
+                  disabled={generatingPractice}
+                  className="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                >
+                  {generatingPractice ? (
+                    <>
+                      <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Generating Practice Questions...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Generate Practice Questions
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </>
         )}
 
         {currentStep === 'practice' && practiceQuestions.length > 0 && (
@@ -110,4 +190,6 @@ function StepIndicator({ step, active, completed, label }: { step: number; activ
     </div>
   )
 }
+
+
 

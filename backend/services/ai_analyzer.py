@@ -3,22 +3,26 @@ AI Service for analyzing mistakes and providing feedback
 """
 import os
 from typing import List, Dict, Optional
-from openai import OpenAI
 import json
+from dotenv import load_dotenv
 
-# Try to use OpenAI, fallback to Anthropic if needed
+# Load environment variables
+load_dotenv()
+
+# Use Groq API
 try:
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    USE_OPENAI = True
-except:
-    USE_OPENAI = False
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        USE_ANTHROPIC = True
-    except:
-        USE_ANTHROPIC = False
+    from groq import Groq
+    api_key = os.getenv("GROQ_API_KEY")
+    if api_key:
+        client = Groq(api_key=api_key)
+        USE_GROQ = True
+    else:
+        USE_GROQ = False
         client = None
+except Exception as e:
+    print(f"Warning: Could not initialize Groq client: {e}")
+    USE_GROQ = False
+    client = None
 
 
 class AIAnalyzer:
@@ -26,8 +30,7 @@ class AIAnalyzer:
     
     def __init__(self):
         self.client = client
-        self.use_openai = USE_OPENAI
-        self.use_anthropic = not USE_OPENAI and USE_ANTHROPIC
+        self.use_groq = USE_GROQ
     
     async def analyze_mistakes(
         self,
@@ -46,81 +49,151 @@ class AIAnalyzer:
         Returns:
             Dictionary with mistakes list and summary
         """
+        # Validate input
+        if not user_answers or len(user_answers) == 0:
+            return {
+                "mistakes": [],
+                "summary": "No answers provided for analysis. Please upload test images with visible answers."
+            }
+        
         if not self.client:
             # Fallback response if AI is not configured
             return {
                 "mistakes": [],
-                "summary": "AI service not configured. Please set OPENAI_API_KEY or ANTHROPIC_API_KEY"
+                "summary": "AI service not configured. Please set GROQ_API_KEY"
             }
         
         # Build prompt for mistake analysis
         prompt = self._build_analysis_prompt(user_answers, correct_answers)
         
-        if self.use_openai:
-            response = self.client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "You are an expert math and physics tutor. Analyze student mistakes and provide detailed feedback."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.3
-            )
-            result = response.choices[0].message.content
-        else:
-            # Anthropic
-            message = self.client.messages.create(
-                model="claude-3-opus-20240229",
-                max_tokens=2000,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            result = message.content[0].text
+        if not prompt:
+            return {
+                "mistakes": [],
+                "summary": "Could not build analysis prompt. Please check your answers."
+            }
+        
+        try:
+            if self.use_groq:
+                response = self.client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[
+                        {"role": "system", "content": "You are an expert math and physics tutor. Analyze student mistakes and provide detailed feedback. Always return valid JSON with the exact structure requested."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.3,
+                    response_format={"type": "json_object"}
+                )
+                result = response.choices[0].message.content
+            else:
+                return {
+                    "mistakes": [],
+                    "summary": "AI service not available"
+                }
+        except Exception as e:
+            print(f"Error calling Groq API: {e}")
+            return {
+                "mistakes": [],
+                "summary": f"Error analyzing mistakes: {str(e)}"
+            }
         
         # Parse response
         try:
             analysis = json.loads(result)
-        except:
-            # If not JSON, create structured response
-            analysis = {
-                "mistakes": self._parse_text_response(result),
-                "summary": result
+            
+            # Validate and clean mistakes
+            mistakes = analysis.get("mistakes", [])
+            if not isinstance(mistakes, list):
+                mistakes = []
+            
+            # Ensure all mistakes have required fields and correct types
+            cleaned_mistakes = []
+            for mistake in mistakes:
+                if isinstance(mistake, dict):
+                    # Convert question_number to int if it's a string
+                    q_num = mistake.get("question_number")
+                    if isinstance(q_num, str):
+                        try:
+                            q_num = int(q_num)
+                        except:
+                            continue
+                    elif not isinstance(q_num, int):
+                        continue
+                    
+                    cleaned_mistakes.append({
+                        "question_number": q_num,
+                        "mistake_description": str(mistake.get("mistake_description", "")),
+                        "why_wrong": str(mistake.get("why_wrong", "")),
+                        "how_to_fix": str(mistake.get("how_to_fix", "")),
+                        "weak_area": str(mistake.get("weak_area", "Unknown")),
+                        "user_answer": user_answers.get(str(q_num), ""),
+                        "correct_answer": correct_answers.get(str(q_num), "") if correct_answers else ""
+                    })
+            
+            return {
+                "mistakes": cleaned_mistakes,
+                "summary": analysis.get("summary", "Analysis complete")
             }
-        
-        return {
-            "mistakes": analysis.get("mistakes", []),
-            "summary": analysis.get("summary", result)
-        }
+        except json.JSONDecodeError as e:
+            print(f"Error parsing JSON response: {e}")
+            print(f"Response was: {result[:500]}")
+            # Try to extract mistakes from text
+            return {
+                "mistakes": self._parse_text_response(result),
+                "summary": result[:500] if result else "Could not parse analysis response"
+            }
+        except Exception as e:
+            print(f"Error processing analysis: {e}")
+            return {
+                "mistakes": [],
+                "summary": f"Error processing analysis: {str(e)}"
+            }
     
     def _build_analysis_prompt(self, user_answers: dict, correct_answers: Optional[dict]) -> str:
         """Build prompt for AI analysis"""
-        prompt = f"""Analyze the following test answers and identify mistakes. For each mistake, provide:
-1. Question number
-2. What the student did wrong
-3. Why it's wrong
-4. How to correct it
-5. The concept/topic that needs improvement
+        if not user_answers or len(user_answers) == 0:
+            return ""
+        
+        prompt = f"""You are analyzing a student's test. Analyze the following answers and identify any mistakes.
 
-User Answers:
+Student's Answers:
 {json.dumps(user_answers, indent=2)}
 """
         
-        if correct_answers:
-            prompt += f"\nCorrect Answers:\n{json.dumps(correct_answers, indent=2)}\n"
+        if correct_answers and len(correct_answers) > 0:
+            prompt += f"\nCorrect Answers (for reference):\n{json.dumps(correct_answers, indent=2)}\n"
+            prompt += "\nCompare the student's answers with the correct answers and identify all mistakes."
+        else:
+            prompt += "\nEven without correct answers provided, analyze each answer for:\n"
+            prompt += "- Mathematical errors (wrong calculations, formula mistakes)\n"
+            prompt += "- Conceptual errors (misunderstanding of concepts)\n"
+            prompt += "- Common mistakes in the subject area\n"
+            prompt += "If an answer looks correct based on standard knowledge, don't mark it as a mistake."
         
         prompt += """
-Return your analysis as JSON with this structure:
+For each mistake you identify, provide:
+1. Question number (as integer)
+2. What the student did wrong (detailed description)
+3. Why it's wrong (explanation of the error)
+4. How to fix it (step-by-step correction)
+5. The concept/topic that needs improvement
+
+IMPORTANT: 
+- Only identify actual mistakes, not correct answers
+- If all answers appear correct, return an empty mistakes array
+- Question numbers must match the keys in user_answers (convert to integers)
+
+Return your analysis as JSON with this EXACT structure:
 {
     "mistakes": [
         {
             "question_number": 1,
-            "mistake_description": "description",
-            "why_wrong": "explanation",
-            "how_to_fix": "correction",
-            "weak_area": "topic/concept"
+            "mistake_description": "detailed description of what went wrong",
+            "why_wrong": "explanation of why this is incorrect",
+            "how_to_fix": "step-by-step correction",
+            "weak_area": "topic/concept name"
         }
     ],
-    "summary": "Overall summary of performance"
+    "summary": "Overall summary of the student's performance"
 }
 """
         return prompt
@@ -135,7 +208,9 @@ Return your analysis as JSON with this structure:
     async def analyze_practice_answer(
         self,
         question_id: str,
-        submitted_answer: List[str]
+        submitted_answer: List[str],
+        question_text: str = None,
+        correct_answer: str = None
     ) -> Dict:
         """
         Analyze a practice question answer
@@ -143,6 +218,8 @@ Return your analysis as JSON with this structure:
         Args:
             question_id: ID of the practice question
             submitted_answer: List of LaTeX equations from the answer
+            question_text: The practice question text (optional)
+            correct_answer: The correct answer (optional)
             
         Returns:
             Dictionary with correctness, feedback, and explanation
@@ -154,51 +231,60 @@ Return your analysis as JSON with this structure:
                 "explanation": ""
             }
         
-        # Get question from database (placeholder)
-        # question = get_question_from_db(question_id)
+        # Build prompt with question context if available
+        prompt_parts = []
         
-        prompt = f"""Analyze if this answer is correct for the practice question.
-
-Submitted Answer:
-{json.dumps(submitted_answer, indent=2)}
-
-Provide:
-1. Is the answer correct? (true/false)
-2. Detailed feedback
-3. Explanation of the solution
-
+        if question_text:
+            prompt_parts.append(f"Practice Question:\n{question_text}\n")
+        
+        prompt_parts.append(f"Student's Submitted Answer:\n{json.dumps(submitted_answer, indent=2)}")
+        
+        if correct_answer:
+            prompt_parts.append(f"\nCorrect Answer (for reference):\n{correct_answer}")
+        
+        prompt_parts.append("\nAnalyze if the student's answer is correct.")
+        prompt_parts.append("Provide:")
+        prompt_parts.append("1. Is the answer correct? (true/false)")
+        prompt_parts.append("2. Detailed feedback on what they did right or wrong")
+        prompt_parts.append("3. Step-by-step explanation of the solution")
+        
+        prompt = "\n".join(prompt_parts)
+        
+        prompt += """
+        
 Return as JSON:
-{{
+{
     "is_correct": true/false,
     "feedback": "detailed feedback",
     "explanation": "step-by-step explanation"
-}}
+}
 """
         
-        if self.use_openai:
+        if self.use_groq:
             response = self.client.chat.completions.create(
-                model="gpt-4",
+                model="llama-3.3-70b-versatile",
                 messages=[
-                    {"role": "system", "content": "You are a math and physics tutor providing detailed feedback on student answers."},
+                    {"role": "system", "content": "You are a math and physics tutor providing detailed feedback on student answers. Always return valid JSON."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.3
+                temperature=0.3,
+                response_format={"type": "json_object"}
             )
             result = response.choices[0].message.content
-        else:
-            message = self.client.messages.create(
-                model="claude-3-opus-20240229",
-                max_tokens=1000,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            result = message.content[0].text
         
         try:
-            return json.loads(result)
-        except:
+            parsed = json.loads(result)
+            # Ensure all required fields are present
+            return {
+                "is_correct": parsed.get("is_correct", False),
+                "feedback": parsed.get("feedback", "No feedback provided"),
+                "explanation": parsed.get("explanation", "")
+            }
+        except Exception as e:
+            print(f"Error parsing practice answer feedback: {e}")
             return {
                 "is_correct": False,
-                "feedback": result,
+                "feedback": result if result else "Could not analyze answer",
                 "explanation": ""
             }
 

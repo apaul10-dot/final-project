@@ -30,3 +30,5 @@ class TestSubmission(BaseModel):
     images: List[str]
     extracted_content: dict
 
+
+

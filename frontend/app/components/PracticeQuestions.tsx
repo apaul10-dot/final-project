@@ -40,10 +40,16 @@ export default function PracticeQuestions({ questions, testId }: PracticeQuestio
     try {
       const formData = new FormData()
       formData.append('answer_image', answerImage)
-      formData.append('question_id', currentQuestion.id)
+      formData.append('question_id', currentQuestion.id || '')
+      if (currentQuestion.question_text) {
+        formData.append('question_text', currentQuestion.question_text)
+      }
+      if (currentQuestion.correct_answer) {
+        formData.append('correct_answer', currentQuestion.correct_answer)
+      }
 
       const response = await axios.post<PracticeAnswer>(
-        'http://localhost:8000/api/submit-practice-answer',
+        '/api/submit-practice-answer',
         formData,
         {
           headers: {
@@ -255,4 +261,6 @@ export default function PracticeQuestions({ questions, testId }: PracticeQuestio
     </div>
   )
 }
+
+
 

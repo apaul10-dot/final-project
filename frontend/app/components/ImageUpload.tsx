@@ -26,29 +26,50 @@ export default function ImageUpload({ onUploadComplete }: ImageUploadProps) {
   })
 
   const handleUpload = async () => {
-    if (uploadedImages.length === 0) return
+    if (uploadedImages.length === 0) {
+      alert('Please select at least one image to upload.')
+      return
+    }
 
     setUploading(true)
     try {
+      // Check backend connection - try API endpoint directly (skip health check)
+      // The upload endpoint will fail if backend is down anyway
+
       const formData = new FormData()
       uploadedImages.forEach((file) => {
         formData.append('images', file)
       })
 
       const response = await axios.post<TestData>(
-        'http://localhost:8000/api/upload-test',
+        '/api/upload-test',
         formData,
         {
           headers: {
             'Content-Type': 'multipart/form-data',
           },
+          timeout: 30000, // 30 second timeout
         }
       )
+
+      if (!response.data || !response.data.test_id) {
+        throw new Error('Invalid response from server')
+      }
 
       onUploadComplete(response.data)
     } catch (error) {
       console.error('Upload error:', error)
-      alert('Error uploading images. Please try again.')
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ECONNREFUSED') {
+          alert('Cannot connect to server. Please make sure the backend is running.')
+        } else if (error.response) {
+          alert(`Server error: ${error.response.status} - ${error.response.data?.detail || 'Unknown error'}`)
+        } else {
+          alert(`Upload error: ${error.message}`)
+        }
+      } else {
+        alert(`Error uploading images: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      }
     } finally {
       setUploading(false)
     }
@@ -128,4 +149,6 @@ export default function ImageUpload({ onUploadComplete }: ImageUploadProps) {
     </div>
   )
 }
+
+
 
