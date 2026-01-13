@@ -24,11 +24,36 @@ class LatexOCRService:
     
     def __init__(self):
         self.model = None
+        self.easyocr_reader = None
+        self._easyocr_initialized = False
+        
         if LatexOCR:
             try:
                 self.model = LatexOCR()
             except Exception as e:
                 print(f"Warning: Could not initialize LatexOCR: {e}")
+        
+        # Initialize EasyOCR reader (lazy loading)
+        self._init_easyocr()
+    
+    def _init_easyocr(self):
+        """Initialize EasyOCR reader (only once)"""
+        if self._easyocr_initialized:
+            return
+        
+        try:
+            import easyocr
+            print("Initializing EasyOCR for handwriting recognition...")
+            # Initialize with English, no GPU, quiet mode
+            self.easyocr_reader = easyocr.Reader(['en'], gpu=False, verbose=False)
+            self._easyocr_initialized = True
+            print("EasyOCR initialized successfully")
+        except ImportError:
+            print("Warning: EasyOCR not installed. Install with: pip install easyocr")
+            self.easyocr_reader = None
+        except Exception as e:
+            print(f"Warning: Could not initialize EasyOCR: {e}")
+            self.easyocr_reader = None
     
     def extract_equations(self, image: Image.Image) -> List[str]:
         """
@@ -56,9 +81,13 @@ class LatexOCRService:
             print(f"Error extracting LaTeX: {e}")
             return []
     
-    def _preprocess_image(self, image: Image.Image) -> Image.Image:
+    def _preprocess_image(self, image: Image.Image, for_handwriting=False) -> Image.Image:
         """
         Preprocess image to improve OCR accuracy
+        
+        Args:
+            image: PIL Image to preprocess
+            for_handwriting: If True, apply handwriting-optimized preprocessing
         """
         # Convert to RGB if needed
         if image.mode != 'RGB':
@@ -68,15 +97,29 @@ class LatexOCRService:
             # Convert to numpy array for OpenCV processing
             img_array = np.array(image)
             
-            # Convert to grayscale
-            gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-            
-            # Apply thresholding
-            _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            
-            # Convert back to PIL Image
-            processed = Image.fromarray(thresh)
-            return processed
+            if for_handwriting:
+                # Better preprocessing for handwriting
+                # Convert to grayscale
+                gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+                
+                # Apply Gaussian blur to reduce noise
+                blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+                
+                # Apply adaptive thresholding (better for variable lighting)
+                thresh = cv2.adaptiveThreshold(
+                    blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                    cv2.THRESH_BINARY, 11, 2
+                )
+                
+                # Convert back to PIL Image
+                processed = Image.fromarray(thresh)
+                return processed
+            else:
+                # Standard preprocessing for equations
+                gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+                _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                processed = Image.fromarray(thresh)
+                return processed
         else:
             # Basic preprocessing without OpenCV
             return image
@@ -141,24 +184,30 @@ class LatexOCRService:
         # Try to extract text using EasyOCR (better for handwriting)
         text_parts = []
         
-        try:
-            import easyocr
-            # Initialize reader (will download models on first use)
+        if self.easyocr_reader:
             try:
-                reader = easyocr.Reader(['en'], gpu=False, verbose=False)
-                text_results = reader.readtext(np.array(image))
+                # Preprocess image for better handwriting recognition
+                processed_img = self._preprocess_image(image, for_handwriting=True)
                 
-                # Combine all text
+                # Convert to numpy array
+                img_array = np.array(processed_img.convert('RGB'))
+                
+                # Extract text with EasyOCR
+                text_results = self.easyocr_reader.readtext(img_array)
+                
+                # Combine all text with confidence threshold
                 for (bbox, text, confidence) in text_results:
-                    if confidence > 0.3:  # Lower threshold for handwriting
-                        text_parts.append(text)
+                    if confidence > 0.2:  # Lower threshold for handwriting (was 0.3)
+                        text_parts.append(text.strip())
                 
-                result["text"] = " ".join(text_parts)
+                if text_parts:
+                    result["text"] = " ".join(text_parts)
+                    print(f"EasyOCR extracted {len(text_parts)} text regions")
             except Exception as e:
-                print(f"EasyOCR error: {e}")
+                print(f"EasyOCR extraction error: {e}")
+                import traceback
+                traceback.print_exc()
                 # Continue to fallback
-        except ImportError:
-            pass  # EasyOCR not available, try fallback
         
         # Fallback to pytesseract if EasyOCR didn't work
         if not text_parts:

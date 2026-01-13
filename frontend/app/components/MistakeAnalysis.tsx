@@ -173,21 +173,33 @@ export default function MistakeAnalysis({ testData, onAnalysisComplete }: Mistak
 
       {/* Pasted text analysis */}
       <div className="mb-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
-        <h3 className="font-semibold text-gray-800 mb-2">Paste questions & answers (optional)</h3>
-        <p className="text-sm text-gray-600 mb-2">If you copied text instead of uploading images, paste it here and click Analyze Text.</p>
+        <h3 className="font-semibold text-gray-800 mb-2">📋 Paste Test Content (Questions & Answers)</h3>
+        <p className="text-sm text-gray-600 mb-2">
+          Paste your entire test here - questions, work, and answers. The AI will intelligently extract your answers even from complex math problems and work steps.
+        </p>
         <textarea
           value={rawText}
           onChange={(e) => setRawText(e.target.value)}
-          className="w-full border rounded p-2 text-sm h-24 mb-2"
-          placeholder={`Example:\n1. What is 2+2? Answer: 5\n2. Derivative of sin(x)? Answer: cos(x)`}
+          className="w-full border rounded p-2 text-sm h-40 mb-2 font-mono"
+          placeholder={`Example:\n\nQuestion 1: Solve for x: 2x + 3 = 7\n2x + 3 = 7\n2x = 4\nx = 2\n\nQuestion 2: Find the derivative of x²\nf(x) = x²\nf'(x) = 2x\n\nQuestion 3: What is ∫x dx?\n∫x dx = x²/2 + C`}
         />
-        <button
-          onClick={handleAnalyzeText}
-          disabled={analyzing}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-        >
-          {analyzing ? 'Analyzing...' : 'Analyze Text'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleAnalyzeText}
+            disabled={analyzing || !rawText.trim()}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          >
+            {analyzing ? 'Analyzing...' : 'Analyze Pasted Text'}
+          </button>
+          {rawText.trim() && (
+            <span className="text-xs text-gray-500">
+              {rawText.split('\n').length} lines, ~{rawText.length} characters
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-gray-500 mt-2">
+          💡 Tip: You can paste questions with work steps - the AI will find your final answers automatically!
+        </p>
       </div>
 
       {hasExtractedAnswers && !analyzing && (

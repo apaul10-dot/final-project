@@ -301,8 +301,19 @@ Return as JSON with user_answers containing question numbers and their final ans
     
     except Exception as e:
         import traceback
-        print(f"Upload error: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=str(e))
+        error_trace = traceback.format_exc()
+        print(f"Upload error: {error_trace}")
+        
+        # Provide more helpful error messages
+        error_msg = str(e)
+        if "EasyOCR" in error_msg or "easyocr" in error_msg.lower():
+            error_msg = "Error reading handwriting. Please ensure images are clear and readable."
+        elif "image" in error_msg.lower() or "pil" in error_msg.lower():
+            error_msg = "Error processing image. Please ensure the file is a valid image format."
+        elif "groq" in error_msg.lower() or "api" in error_msg.lower():
+            error_msg = "Error connecting to AI service. Please check your API configuration."
+        
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 class AnalyzeRequest(BaseModel):
@@ -357,51 +368,126 @@ async def analyze_mistakes(request: AnalyzeRequest):
 async def analyze_text(request: AnalyzeTextRequest):
     """
     Analyze mistakes from raw pasted text (questions/answers)
+    Intelligently extracts questions and answers, even from complex math problems
     """
     if not request.text or not request.text.strip():
         raise HTTPException(status_code=400, detail="No text provided for analysis")
 
-    extract_prompt = f"""
-You will receive raw pasted text from a student's test (questions and their answers).
-Extract question numbers and the student's answers. If question numbers are missing, infer sequential numbers starting at 1.
+    extract_prompt = f"""You are analyzing a student's test that was pasted as text. Your job is to extract ALL questions and the student's FINAL ANSWERS.
 
-Return JSON:
+IMPORTANT INSTRUCTIONS:
+1. Extract EVERY question number and its full question text
+2. For each question, find the student's FINAL ANSWER - this could be:
+   - Explicitly stated (e.g., "Answer: 42" or "= 42")
+   - At the end of their work/steps (the last value or expression)
+   - After an equals sign (=) at the conclusion
+   - The result of calculations shown
+   - A conclusion or solution statement
+
+3. For complex math problems:
+   - Look for the final result after all work is shown
+   - If they show steps like "2x + 3 = 7, so x = 2", the answer is "2" or "x = 2"
+   - If they show a derivative calculation ending with "= 2x", the answer is "2x"
+   - If they solve an equation and end with "x = 3 or x = -1", extract that full answer
+
+4. Be intelligent - even if the answer isn't explicitly labeled, infer it from:
+   - The last line of work for that question
+   - The conclusion of their reasoning
+   - The final value after calculations
+   - Any boxed or highlighted result
+
+5. Handle various formats:
+   - "Question 1: ... Answer: ..."
+   - "1. ... [work] = [answer]"
+   - "Problem 1: ... Solution: ..."
+   - Just work with a final answer at the end
+
+Return JSON with BOTH questions and answers:
 {{
+  "questions": {{
+    "1": "full question text here",
+    "2": "full question text here"
+  }},
   "user_answers": {{
-     "1": "student answer",
-     "2": "student answer"
+    "1": "student's final answer (extracted intelligently)",
+    "2": "student's final answer (extracted intelligently)"
   }}
 }}
 
-Raw text:
+Pasted test content:
 {request.text}
-"""
+
+Extract ALL questions and their corresponding final answers. Be thorough and intelligent about finding answers even if not explicitly stated."""
 
     try:
         if not ai_analyzer.use_groq:
             raise HTTPException(status_code=500, detail="AI service not configured. Please set GROQ_API_KEY")
 
+        # First extraction pass - get questions and answers
         response = ai_analyzer.client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": "You extract questions and answers from raw pasted test text. Always return JSON."},
+                {"role": "system", "content": "You are an expert at parsing test content. Extract ALL questions and intelligently determine the student's final answers, even from complex math work. Always return valid JSON with both questions and user_answers."},
                 {"role": "user", "content": extract_prompt},
             ],
-            temperature=0.1,
+            temperature=0.2,
             response_format={"type": "json_object"}
         )
         parsed = json.loads(response.choices[0].message.content)
         user_answers = parsed.get("user_answers", {})
+        questions = parsed.get("questions", {})
+        
+        # If no answers found, try a more aggressive extraction
+        if not user_answers and len(request.text) > 50:
+            aggressive_prompt = f"""Look at this test content very carefully. The student has provided answers somewhere in their work. Find them.
+
+Content:
+{request.text}
+
+Even if answers aren't explicitly labeled, extract them from:
+- Final values after calculations
+- Results at the end of work
+- Values after equals signs
+- Conclusions or solutions
+
+Return JSON:
+{{
+  "user_answers": {{
+    "1": "extracted answer",
+    "2": "extracted answer"
+  }}
+}}"""
+            
+            try:
+                aggressive_response = ai_analyzer.client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[
+                        {"role": "system", "content": "Be very aggressive in finding answers. Extract any final values, results, or conclusions from the student's work."},
+                        {"role": "user", "content": aggressive_prompt},
+                    ],
+                    temperature=0.3,
+                    response_format={"type": "json_object"}
+                )
+                aggressive_parsed = json.loads(aggressive_response.choices[0].message.content)
+                aggressive_answers = aggressive_parsed.get("user_answers", {})
+                if aggressive_answers:
+                    user_answers = aggressive_answers
+                    print(f"Aggressive extraction found {len(user_answers)} answers")
+            except Exception as e:
+                print(f"Aggressive extraction failed: {e}")
+        
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        print(f"Error extracting from text: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error extracting answers from text: {str(e)}")
 
     if not user_answers:
         return AnalysisResponse(
             test_id=request.test_id or "text-analysis",
             mistakes=[],
-            summary="No answers could be extracted from the provided text. Please ensure answers are included."
+            summary="No answers could be extracted from the provided text. Please ensure the text includes questions and answers (or work that shows final results)."
         )
 
     # Run analysis on extracted answers
