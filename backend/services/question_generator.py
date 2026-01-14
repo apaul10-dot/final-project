@@ -82,10 +82,19 @@ Question #{mistake.get('question_number', '?')}:
                 prompt_parts.append(f"Question {q_num}: {q_text}")
         
         prompt_parts.append(f"\nGenerate {num_questions} practice questions that:")
-        prompt_parts.append("1. Are similar in style and difficulty to the original test questions")
-        prompt_parts.append("2. Target the weak areas identified in the mistakes")
-        prompt_parts.append("3. Help the student practice the concepts they struggled with")
-        prompt_parts.append("4. Use similar problem structures but with different numbers/scenarios")
+        prompt_parts.append("1. Are VERY SIMILAR in style, format, and structure to the original test questions")
+        prompt_parts.append("2. Match the difficulty level of the original questions exactly")
+        prompt_parts.append("3. Target the weak areas identified in the mistakes")
+        prompt_parts.append("4. Use the SAME problem structure/pattern as the originals, just with different numbers/scenarios")
+        prompt_parts.append("5. Follow the same solution approach and steps as the original questions")
+        prompt_parts.append("6. Use similar mathematical notation and formatting")
+        
+        # Add pattern analysis if we have original questions
+        if original_questions:
+            prompt_parts.append("\nPattern Analysis of Original Questions:")
+            for q_num, q_text in list(original_questions.items())[:3]:  # Analyze first 3
+                prompt_parts.append(f"  - Q{q_num} pattern: {q_text[:100]}...")
+            prompt_parts.append("Match these patterns closely in your generated questions.")
         
         prompt_parts.append("\nFor each question, provide:")
         prompt_parts.append("1. Question text (in LaTeX format for equations)")
@@ -113,16 +122,28 @@ Return as JSON object with a "questions" array:
 """
         
         if self.use_groq:
-            response = self.client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": "You are an expert math and physics tutor creating practice questions. Always return valid JSON arrays."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                response_format={"type": "json_object"}
+            import asyncio
+            from .timeout_utils import run_with_timeout
+            
+            async def generate_questions_async():
+                response = self.client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[
+                        {"role": "system", "content": "You are an expert math and physics tutor creating practice questions. Always return valid JSON arrays. Match the style and structure of the original questions closely."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.7,
+                    response_format={"type": "json_object"}
+                )
+                return response.choices[0].message.content
+            
+            # Use timeout protection
+            result = await run_with_timeout(
+                generate_questions_async(),
+                timeout=60.0,
+                default_return='{"questions": []}',
+                error_message="Question generation timed out"
             )
-            result = response.choices[0].message.content
             # Groq returns JSON object, extract the array if needed
             try:
                 parsed = json.loads(result)

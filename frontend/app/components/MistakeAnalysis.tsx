@@ -46,12 +46,79 @@ export default function MistakeAnalysis({ testData, onAnalysisComplete }: Mistak
       }
 
       // Use extracted answers from testData, or fallback to userAnswers state
-      const answersToUse = Object.keys(testData.user_answers || {}).length > 0 
+      let answersToUse = Object.keys(testData.user_answers || {}).length > 0 
         ? testData.user_answers 
         : userAnswers
 
+      // CRITICAL FIX: If no answers extracted but we have text, automatically extract from text
+      if (Object.keys(answersToUse).length === 0 && testData.extracted_text && testData.extracted_text.trim().length > 20) {
+        console.log('No answers from upload, automatically extracting from extracted text...')
+        try {
+          // Use analyze-text endpoint which will extract answers AND analyze them
+          const textResponse = await axios.post('/api/analyze-text', {
+            test_id: testData.test_id,
+            text: testData.extracted_text,
+          }, {
+            timeout: 60000,
+          })
+          
+          // analyze-text now returns user_answers and questions in the response!
+          if (textResponse.data) {
+            const extractedAnswers = textResponse.data.user_answers || {}
+            const extractedQuestions = textResponse.data.questions || {}
+            const mistakes = textResponse.data.mistakes || []
+            const summary = textResponse.data.summary || ''
+            
+            // If we got answers from analyze-text, use them!
+            if (Object.keys(extractedAnswers).length > 0) {
+              console.log(`✅ Successfully extracted ${Object.keys(extractedAnswers).length} answers from text!`)
+              
+              // Update state with extracted answers
+              setUserAnswers(extractedAnswers)
+              
+              // Use the extracted answers for analysis
+              answersToUse = extractedAnswers
+              
+              // If analyze-text already analyzed (has mistakes), use those results directly
+              if (mistakes.length > 0 || (summary && !summary.toLowerCase().includes('no answers'))) {
+                setMistakes(mistakes)
+                setSummary(summary)
+                onAnalysisComplete(mistakes)
+                setAnalyzing(false)
+                return // Success! Don't continue to analyze-mistakes
+              }
+              
+              // Otherwise, continue to analyze-mistakes with extracted answers
+            } else {
+              console.log('⚠️ analyze-text returned but no answers found')
+              // Pre-fill text box for manual review
+              setRawText(testData.extracted_text)
+              setAnalyzing(false)
+              alert(`Answers were not automatically extracted from the image, but ${testData.extracted_text.length} characters of text were extracted. The text has been pasted into the text box below - please review it and click "Analyze Text" to extract answers intelligently.`)
+              return
+            }
+          }
+        } catch (textError) {
+          console.warn('Failed to extract from text:', textError)
+          // Pre-fill text box for manual review
+          if (testData.extracted_text) {
+            setRawText(testData.extracted_text)
+          }
+          setAnalyzing(false)
+          alert(`Could not automatically extract answers. The extracted text (${testData.extracted_text.length} chars) has been pasted into the text box below - please review it and click "Analyze Text".`)
+          return
+        }
+      }
+
+      // Final check - if still no answers after all attempts
       if (Object.keys(answersToUse).length === 0) {
-        throw new Error('No answers found in the uploaded test images. Please make sure your test images contain visible answers.')
+        // Pre-fill text box if we have extracted text
+        if (testData.extracted_text && testData.extracted_text.trim().length > 0) {
+          setRawText(testData.extracted_text)
+        }
+        setAnalyzing(false)
+        alert('No answers were automatically extracted. Please use the text box below to paste the questions and answers, then click "Analyze Text".')
+        return // Don't throw error - let user try text analysis
       }
 
       const response = await axios.post('/api/analyze-mistakes', {
@@ -173,33 +240,22 @@ export default function MistakeAnalysis({ testData, onAnalysisComplete }: Mistak
 
       {/* Pasted text analysis */}
       <div className="mb-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
-        <h3 className="font-semibold text-gray-800 mb-2">📋 Paste Test Content (Questions & Answers)</h3>
-        <p className="text-sm text-gray-600 mb-2">
-          Paste your entire test here - questions, work, and answers. The AI will intelligently extract your answers even from complex math problems and work steps.
-        </p>
+        <h3 className="font-semibold text-gray-800 mb-2">Paste questions & answers (optional)</h3>
+        <p className="text-sm text-gray-600 mb-2">If you copied text instead of uploading images, paste it here and click Analyze Text.</p>
         <textarea
           value={rawText}
           onChange={(e) => setRawText(e.target.value)}
-          className="w-full border rounded p-2 text-sm h-40 mb-2 font-mono"
-          placeholder={`Example:\n\nQuestion 1: Solve for x: 2x + 3 = 7\n2x + 3 = 7\n2x = 4\nx = 2\n\nQuestion 2: Find the derivative of x²\nf(x) = x²\nf'(x) = 2x\n\nQuestion 3: What is ∫x dx?\n∫x dx = x²/2 + C`}
+          className="w-full border rounded p-2 text-sm h-24 mb-2 text-gray-900 bg-white"
+          placeholder={`Example:\n1. What is 2+2? Answer: 5\n2. Derivative of sin(x)? Answer: cos(x)`}
+          style={{ color: '#111827' }}
         />
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleAnalyzeText}
-            disabled={analyzing || !rawText.trim()}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-          >
-            {analyzing ? 'Analyzing...' : 'Analyze Pasted Text'}
-          </button>
-          {rawText.trim() && (
-            <span className="text-xs text-gray-500">
-              {rawText.split('\n').length} lines, ~{rawText.length} characters
-            </span>
-          )}
-        </div>
-        <p className="text-xs text-gray-500 mt-2">
-          💡 Tip: You can paste questions with work steps - the AI will find your final answers automatically!
-        </p>
+        <button
+          onClick={handleAnalyzeText}
+          disabled={analyzing}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+        >
+          {analyzing ? 'Analyzing...' : 'Analyze Text'}
+        </button>
       </div>
 
       {hasExtractedAnswers && !analyzing && (
