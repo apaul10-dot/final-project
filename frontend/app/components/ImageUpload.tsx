@@ -42,7 +42,7 @@ export default function ImageUpload({ onUploadComplete }: ImageUploadProps) {
       })
 
       const response = await axios.post<TestData>(
-        '/api/upload-test',
+        'http://localhost:8000/api/upload-test',
         formData,
         {
           headers: {

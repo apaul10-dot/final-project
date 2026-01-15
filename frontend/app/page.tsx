@@ -55,12 +55,12 @@ export default function Home() {
       })
 
       // Check backend connection
-      const healthCheck = await fetch('/health')
+      const healthCheck = await fetch('http://localhost:8000/health')
       if (!healthCheck.ok) {
         throw new Error('Backend server is not responding')
       }
 
-      const response = await fetch('/api/generate-practice', {
+      const response = await fetch('http://localhost:8000/api/generate-practice', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

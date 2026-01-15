@@ -49,7 +49,7 @@ export default function PracticeQuestions({ questions, testId }: PracticeQuestio
       }
 
       const response = await axios.post<PracticeAnswer>(
-        '/api/submit-practice-answer',
+        'http://localhost:8000/api/submit-practice-answer',
         formData,
         {
           headers: {
