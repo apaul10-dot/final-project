@@ -28,10 +28,10 @@ export default function LoadingScreen({ onComplete, testData, duration = 25000, 
   useEffect(() => {
     setFadeIn(true)
     
-    // Change fact every 7 seconds
+    // Change fact every 4 seconds
     const factInterval = setInterval(() => {
       setCurrentFactIndex((prev) => (prev + 1) % funFacts.length)
-    }, 7000)
+    }, 4000)
 
     // Wait for specified duration then complete
     const completeTimeout = setTimeout(async () => {

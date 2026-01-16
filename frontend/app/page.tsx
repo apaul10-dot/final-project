@@ -163,7 +163,7 @@ export default function Home() {
         <LoadingScreen
           onComplete={handlePracticeLoadingComplete}
               testData={testData}
-          duration={10000}
+          duration={7000}
           showAnalysis={false}
         />
       )}
@@ -186,7 +186,7 @@ export default function Home() {
         <LoadingScreen
           onComplete={handleResultsLoadingComplete}
           testData={testData}
-          duration={10000}
+          duration={5000}
           showAnalysis={false}
         />
       )}

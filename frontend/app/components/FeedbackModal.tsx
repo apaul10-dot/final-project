@@ -39,13 +39,13 @@ export default function FeedbackModal({ onSubmit, onClose, submitted }: Feedback
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4">
         <h2 className="text-2xl font-light text-black mb-4">
-          Why were you dissatisfied today?
+          Enter your Feedback...
         </h2>
         <textarea
           value={feedback}
           onChange={(e) => setFeedback(e.target.value)}
           className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 transition-all duration-300 bg-white text-black placeholder-gray-400 resize-none mb-6"
-          placeholder="Enter your feedback..."
+          placeholder="Your Written Feedback..."
           rows={4}
         />
         <div className="flex gap-4">
