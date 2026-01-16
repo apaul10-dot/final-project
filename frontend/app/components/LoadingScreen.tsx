@@ -6,6 +6,8 @@ import axios from 'axios'
 interface LoadingScreenProps {
   onComplete: (data: any) => void
   testData: any
+  duration?: number
+  showAnalysis?: boolean
 }
 
 const funFacts = [
@@ -19,10 +21,9 @@ const funFacts = [
   "Fun fact: A group of flamingos is called a 'flamboyance'!",
 ]
 
-export default function LoadingScreen({ onComplete, testData }: LoadingScreenProps) {
+export default function LoadingScreen({ onComplete, testData, duration = 25000, showAnalysis = true }: LoadingScreenProps) {
   const [currentFactIndex, setCurrentFactIndex] = useState(0)
   const [fadeIn, setFadeIn] = useState(false)
-  const [startTime] = useState(Date.now())
 
   useEffect(() => {
     setFadeIn(true)
@@ -32,54 +33,59 @@ export default function LoadingScreen({ onComplete, testData }: LoadingScreenPro
       setCurrentFactIndex((prev) => (prev + 1) % funFacts.length)
     }, 7000)
 
-    // Wait 20 seconds then analyze
-    const analyzeTimeout = setTimeout(async () => {
-      try {
-        const response = await axios.post('http://localhost:8000/api/analyze-mistakes', {
-          test_id: testData.test_id,
-          user_answers: testData.user_answers || {},
-        }, {
-          timeout: 60000,
-        })
+    // Wait for specified duration then complete
+    const completeTimeout = setTimeout(async () => {
+      if (showAnalysis && testData) {
+        try {
+          const response = await axios.post('http://localhost:8000/api/analyze-mistakes', {
+            test_id: testData.test_id,
+            user_answers: testData.user_answers || {},
+            questions: testData.questions || {},
+            subject: testData.subject || '',
+          }, {
+            timeout: 60000,
+          })
 
-        if (response.data) {
-          // Generate practice questions (limit to 3)
-          try {
-            const practiceResponse = await axios.post('http://localhost:8000/api/generate-practice', {
-              test_id: testData.test_id,
-              mistake_ids: (response.data.mistakes || []).map((m: any) => m.question_number?.toString() || ''),
-              mistakes: response.data.mistakes || [],
-              original_questions: testData.questions || {},
-            }, {
-              timeout: 60000,
-            })
+          if (response.data) {
+            // Generate practice questions (limit to 3)
+            try {
+              const practiceResponse = await axios.post('http://localhost:8000/api/generate-practice', {
+                test_id: testData.test_id,
+                mistake_ids: (response.data.mistakes || []).map((m: any) => m.question_number?.toString() || ''),
+                mistakes: response.data.mistakes || [],
+                original_questions: testData.questions || {},
+              }, {
+                timeout: 60000,
+              })
 
-            const practiceQuestions = (practiceResponse.data?.questions || []).slice(0, 3)
-            onComplete({
-              ...response.data,
-              practiceQuestions: practiceQuestions,
-            })
-          } catch (practiceError) {
-            console.error('Practice generation error:', practiceError)
-            // Still proceed with analysis but no practice questions
-            onComplete({
-              ...response.data,
-              practiceQuestions: [],
-            })
+              const practiceQuestions = (practiceResponse.data?.questions || []).slice(0, 3)
+              onComplete({
+                ...response.data,
+                practiceQuestions: practiceQuestions,
+              })
+            } catch (practiceError) {
+              console.error('Practice generation error:', practiceError)
+              onComplete({
+                ...response.data,
+                practiceQuestions: [],
+              })
+            }
           }
+        } catch (error) {
+          console.error('Analysis error:', error)
+          onComplete({ mistakes: [], summary: '', practiceQuestions: [] })
         }
-      } catch (error) {
-        console.error('Analysis error:', error)
-        // Still proceed with empty data
+      } else {
+        // Just pass through for practice loading - no analysis needed
         onComplete({ mistakes: [], summary: '', practiceQuestions: [] })
       }
-    }, 20000)
+    }, duration)
 
     return () => {
       clearInterval(factInterval)
-      clearTimeout(analyzeTimeout)
+      clearTimeout(completeTimeout)
     }
-  }, [testData, onComplete])
+  }, [testData, onComplete, duration, showAnalysis])
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4">

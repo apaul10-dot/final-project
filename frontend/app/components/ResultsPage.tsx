@@ -22,12 +22,8 @@ export default function ResultsPage({ answers, results, userName }: ResultsPageP
   }, [])
 
   const handleEmojiClick = (emoji: string) => {
-    if (emoji === 'sad' || emoji === 'neutral') {
-      setShowFeedback(true)
-    } else {
-      // Happy emoji - no feedback needed
-      setFeedbackSubmitted(true)
-    }
+    // All emojis show feedback popup
+    setShowFeedback(true)
   }
 
   const handleFeedbackSubmit = () => {

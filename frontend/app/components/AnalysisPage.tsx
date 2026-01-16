@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import 'katex/dist/katex.min.css'
 import { InlineMath } from 'react-katex'
+import ArrowButton from './ArrowButton'
 
 interface AnalysisPageProps {
   analysisData: any
@@ -31,24 +32,24 @@ export default function AnalysisPage({ analysisData, onNext }: AnalysisPageProps
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12" onKeyPress={handleKeyPress} tabIndex={0}>
-      <div className={`max-w-4xl w-full transition-opacity duration-700 ${fadeIn ? 'opacity-100' : 'opacity-0'}`}>
+      <div className={`max-w-5xl w-full transition-opacity duration-700 ${fadeIn ? 'opacity-100' : 'opacity-0'}`}>
         {summary && (
           <div className="mb-12 text-center">
-            <p className="text-2xl text-black font-light leading-relaxed">{summary}</p>
+            <p className="text-2xl md:text-3xl text-black font-light leading-relaxed">{summary}</p>
           </div>
         )}
 
-        <div className="space-y-8 mb-12">
+        <div className="space-y-10 mb-12">
           {mistakes.map((mistake: any, index: number) => (
             <div
               key={index}
-              className="border-l-4 border-blue-500 pl-6 py-4 bg-white"
+              className="border-l-4 border-blue-500 pl-8 py-6 bg-white"
             >
-              <h3 className="text-2xl font-light text-black mb-4">
+              <h3 className="text-3xl md:text-4xl font-light text-black mb-6">
                 Question #{mistake.question_number}
               </h3>
               
-              <div className="space-y-4 text-lg text-gray-800 font-light">
+              <div className="space-y-5 text-xl md:text-2xl text-gray-800 font-light">
                 <div>
                   <p className="font-medium mb-2">What you did wrong:</p>
                   <p className="leading-relaxed">{mistake.mistake_description}</p>
@@ -87,12 +88,7 @@ export default function AnalysisPage({ analysisData, onNext }: AnalysisPageProps
         </div>
 
         <div className="text-center">
-          <button
-            onClick={handleNext}
-            className="px-8 py-3 bg-blue-500 text-white rounded-lg text-lg font-medium hover:bg-blue-600 transition-all duration-300"
-          >
-            I understand
-          </button>
+          <ArrowButton onClick={handleNext} />
         </div>
       </div>
     </div>

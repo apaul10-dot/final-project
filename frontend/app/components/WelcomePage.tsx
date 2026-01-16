@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import ArrowButton from './ArrowButton'
 
 interface WelcomePageProps {
   onComplete: (name: string) => void
@@ -53,12 +54,9 @@ export default function WelcomePage({ onComplete }: WelcomePageProps) {
           />
           
           {showNext && (
-            <button
-              onClick={handleNext}
-              className="mt-8 px-8 py-3 bg-blue-500 text-white rounded-lg text-lg font-medium hover:bg-blue-600 transition-all duration-300 opacity-0 animate-fadeIn"
-            >
-              Next
-            </button>
+            <div className="mt-8 flex justify-center opacity-0 animate-fadeIn">
+              <ArrowButton onClick={handleNext} />
+            </div>
           )}
         </div>
       </div>

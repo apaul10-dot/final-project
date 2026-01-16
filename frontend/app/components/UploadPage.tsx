@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useDropzone } from 'react-dropzone'
 import axios from 'axios'
+import ArrowButton from './ArrowButton'
 
 interface UploadPageProps {
   userName: string
@@ -52,6 +53,10 @@ export default function UploadPage({ userName, subject, onUploadComplete }: Uplo
       formData.append('images', selectedFile)
       if (notes.trim()) {
         formData.append('notes', notes.trim())
+      }
+      // Add subject to form data
+      if (subject) {
+        formData.append('subject', subject)
       }
 
       const response = await axios.post(
@@ -125,12 +130,9 @@ export default function UploadPage({ userName, subject, onUploadComplete }: Uplo
         </div>
 
         {showNext && !uploading && (
-          <button
-            onClick={handleNext}
-            className="px-8 py-3 bg-blue-500 text-white rounded-lg text-lg font-medium hover:bg-blue-600 transition-all duration-300 opacity-0 animate-fadeIn"
-          >
-            Next
-          </button>
+          <div className="flex justify-center opacity-0 animate-fadeIn">
+            <ArrowButton onClick={handleNext} />
+          </div>
         )}
 
         {uploading && (

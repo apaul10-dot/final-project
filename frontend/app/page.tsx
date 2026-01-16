@@ -9,7 +9,7 @@ import AnalysisPage from './components/AnalysisPage'
 import PracticeQuestionsPage from './components/PracticeQuestionsPage'
 import ResultsPage from './components/ResultsPage'
 
-type Page = 'welcome' | 'subject' | 'upload' | 'loading' | 'analysis' | 'practice' | 'results'
+type Page = 'welcome' | 'subject' | 'upload' | 'loading' | 'loading-practice' | 'analysis' | 'practice' | 'loading-results' | 'results'
 
 export default function Home() {
   const [currentPage, setCurrentPage] = useState<Page>('welcome')
@@ -45,12 +45,15 @@ export default function Home() {
   }
 
   const handleUploadComplete = (data: any) => {
-    setTestData(data)
+    // Store subject in testData for later use
+    const dataWithSubject = { ...data, subject: selectedSubject }
+    setTestData(dataWithSubject)
+    // Go straight to loading screen (no initial delay)
     setFadeIn(false)
     setTimeout(() => {
       setCurrentPage('loading')
       setFadeIn(true)
-    }, 300)
+    }, 100)
   }
 
   const handleAnalysisComplete = (data: any) => {
@@ -63,6 +66,15 @@ export default function Home() {
   }
 
   const handleAnalysisNext = () => {
+    // Show loading screen for 10 seconds before practice
+    setFadeIn(false)
+    setTimeout(() => {
+      setCurrentPage('loading-practice')
+      setFadeIn(true)
+    }, 300)
+  }
+
+  const handlePracticeLoadingComplete = () => {
     setFadeIn(false)
     setTimeout(() => {
       setCurrentPage('practice')
@@ -75,11 +87,44 @@ export default function Home() {
   }
 
   const handlePracticeNext = () => {
-    // Simulate checking answers (in real app, this would be API call)
+    // Check answers against hardcoded correct answers based on subject
     const results: Record<number, boolean> = {}
+    
+    // Math answers (special angles)
+    const mathAnswers: Record<number, string[]> = {
+      0: ['0'],
+      1: ['\\frac{\\sqrt{3}}{2}', 'sqrt(3)/2', '√3/2', '0.866', 'sqrt3/2'],
+      2: ['\\frac{2\\sqrt{3}}{3}', '2sqrt(3)/3', '2√3/3', '1.155', '2sqrt3/3']
+    }
+    
+    // Physics answers (efficiency percentages)
+    const physicsAnswers: Record<number, string[]> = {
+      0: ['65.3%', '65.3', '0.653'],
+      1: ['81.7%', '81.7', '0.817'],
+      2: ['66.8%', '66.8', '0.668']
+    }
+    
+    const correctAnswers = selectedSubject?.toLowerCase() === 'physics' ? physicsAnswers : mathAnswers
+    
     Object.keys(practiceAnswers).forEach(key => {
-      results[parseInt(key)] = Math.random() > 0.5 // Random for demo
+      const questionId = parseInt(key)
+      const userAnswer = practiceAnswers[questionId].trim().toLowerCase().replace(/\s+/g, '')
+      const possibleAnswers = correctAnswers[questionId] || []
+      
+      // Check if user answer matches any of the correct answer formats
+      results[questionId] = possibleAnswers.some(correct => {
+        const normalizedCorrect = correct.toLowerCase().replace(/\s+/g, '').replace(/[%\\]/g, '')
+        const normalizedUser = userAnswer.replace(/[%\\]/g, '')
+        return normalizedUser === normalizedCorrect || 
+               (normalizedUser.includes('65.3') && questionId === 0) ||
+               (normalizedUser.includes('81.7') && questionId === 1) ||
+               (normalizedUser.includes('66.8') && questionId === 2) ||
+               (normalizedUser === '0' && questionId === 0) ||
+               (normalizedUser.includes('sqrt3') && questionId === 1) ||
+               (normalizedUser.includes('2sqrt3') && questionId === 2)
+      })
     })
+    
     setPracticeResults(results)
     setFadeIn(false)
     setTimeout(() => {
@@ -110,6 +155,16 @@ export default function Home() {
         <LoadingScreen
           onComplete={handleAnalysisComplete}
           testData={testData}
+          duration={25000}
+          showAnalysis={true}
+        />
+      )}
+      {currentPage === 'loading-practice' && (
+        <LoadingScreen
+          onComplete={handlePracticeLoadingComplete}
+              testData={testData}
+          duration={10000}
+          showAnalysis={false}
         />
       )}
       {currentPage === 'analysis' && (
@@ -124,6 +179,15 @@ export default function Home() {
           onAnswerSubmit={handlePracticeSubmit}
           onNext={handlePracticeNext}
           allAnswered={Object.keys(practiceAnswers).length >= 3}
+          subject={selectedSubject}
+        />
+      )}
+      {currentPage === 'loading-results' && (
+        <LoadingScreen
+          onComplete={handleResultsLoadingComplete}
+          testData={testData}
+          duration={10000}
+          showAnalysis={false}
         />
       )}
       {currentPage === 'results' && (

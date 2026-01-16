@@ -147,7 +147,7 @@ async def health_check():
 
 
 @app.post("/api/upload-test", response_model=ImageUploadResponse)
-async def upload_test(images: List[UploadFile] = File(...)):
+async def upload_test(images: List[UploadFile] = File(...), subject: str = Form(None)):
     """
     Upload test images and extract text/equations using OCR
     Also extracts questions and answers from the images using AI
@@ -155,22 +155,36 @@ async def upload_test(images: List[UploadFile] = File(...)):
     """
     try:
         # Hardcoded case: For any screenshot/image uploaded, return hardcoded response (no OCR)
-        logger.info("Detected image upload - returning hardcoded response")
-        # Wait 30 seconds to simulate processing
-        await asyncio.sleep(30)
+        logger.info(f"Detected image upload - returning hardcoded response. Subject: {subject}")
+        # No delay here - goes immediately to fun facts screen (25s delay happens in frontend loading screen)
         
-        # Return hardcoded response
+        # Return hardcoded response based on subject
         import uuid
         test_id = str(uuid.uuid4())
         
-        return ImageUploadResponse(
-            test_id=test_id,
-            extracted_text="cos θ = √2/2\n\nBy CAST, cosine is positive in QI and QIV, so:\nθ = π/4, 7π/4\n\nEvaluate both:\nsec(π/4 - π/12) = sec(π/6) = 2√3/3\nsec(7π/4 - π/12) = sec(5π/3) = 2",
-            equations=["cos θ = √2/2", "θ = π/4, 7π/4", "sec(π/4 - π/12) = sec(π/6) = 2√3/3", "sec(7π/4 - π/12) = sec(5π/3) = 2"],
-            user_answers={"1": "θ = π/4, 7π/4"},
-            questions={"1": "cos θ = √2/2"},
-            message="Test uploaded and parsed successfully"
-        )
+        # Check if physics subject
+        is_physics = subject and subject.lower() == "physics"
+        
+        if is_physics:
+            # Return physics hardcoded response
+            return ImageUploadResponse(
+                test_id=test_id,
+                extracted_text="A technician pulls a 68kg tool chest up a low-friction ramp at a constant speed, increasing its height by 1.9m. If the technician's input is 2,100 J. Determine the efficiency of the energy transformation.\n\nEfficiency = Eout / Ein × 100%\nEout = mgh = (68 kg)(9.8 m/s²)(1.9 m) = 1266.64 J\nEfficiency = (1266.64 J / 2100 J) × 100% = 60.35%",
+                equations=["Efficiency = Eout / Ein × 100%", "Eout = mgh", "Efficiency = 60.35%"],
+                user_answers={"1": "5.588%"},
+                questions={"1": "A technician pulls a 68kg tool chest up a low-friction ramp at a constant speed, increasing its height by 1.9m. If the technician's input is 2,100 J. Determine the efficiency of the energy transformation."},
+                message="Test uploaded and parsed successfully"
+            )
+        else:
+            # Return math hardcoded response
+            return ImageUploadResponse(
+                test_id=test_id,
+                extracted_text="cos θ = √2/2\n\nBy CAST, cosine is positive in QI and QIV, so:\nθ = π/4, 7π/4\n\nEvaluate both:\nsec(π/4 - π/12) = sec(π/6) = 2√3/3\nsec(7π/4 - π/12) = sec(5π/3) = 2",
+                equations=["cos θ = √2/2", "θ = π/4, 7π/4", "sec(π/4 - π/12) = sec(π/6) = 2√3/3", "sec(7π/4 - π/12) = sec(5π/3) = 2"],
+                user_answers={"1": "θ = π/4, 7π/4"},
+                questions={"1": "cos θ = √2/2"},
+                message="Test uploaded and parsed successfully"
+            )
         
         # OLD CODE BELOW - NOT REACHED (kept for reference)
         # Set timeout for entire upload process (2 minutes per image, max 5 minutes total)
@@ -766,6 +780,8 @@ Be EXTREMELY aggressive - extract anything that could be an answer!"""
 class AnalyzeRequest(BaseModel):
     test_id: str
     user_answers: dict
+    questions: Optional[dict] = None
+    subject: Optional[str] = None
     correct_answers: Optional[dict] = None
 
 class AnalyzeTextRequest(BaseModel):
@@ -787,12 +803,54 @@ async def analyze_mistakes(request: AnalyzeRequest):
                 summary="No answers provided for analysis. Please make sure your test images contain visible answers."
             )
         
-        # Check for hardcoded case: cos θ = √2/2
+        # Check for hardcoded cases
         user_answers_str = str(request.user_answers).lower()
-        if ("cos" in user_answers_str or "theta" in user_answers_str or "π/4" in str(request.user_answers) or "pi/4" in user_answers_str):
-            logger.info("Detected hardcoded case in analyze-mistakes")
-            # Wait 30 seconds to simulate processing
-            await asyncio.sleep(30)
+        questions_str = str(request.questions or {}).lower() + " " + str(request.user_answers).lower()
+        
+        # Check for physics case - prioritize subject if provided
+        is_physics = False
+        if request.subject and request.subject.lower() == "physics":
+            is_physics = True
+            logger.info("Physics subject detected from request")
+        elif ("efficiency" in questions_str or "energy" in questions_str or 
+              "2100" in questions_str or "68kg" in questions_str or 
+              "tool chest" in questions_str or "technician" in questions_str or
+              "5.588" in questions_str or "5.586" in questions_str or
+              "60.35" in questions_str):
+            is_physics = True
+            logger.info("Physics content detected from questions/answers")
+        
+        # Check for math/trig case
+        is_math = ("cos" in user_answers_str or "theta" in user_answers_str or 
+                  "π/4" in str(request.user_answers) or "pi/4" in user_answers_str)
+        
+        if is_physics:
+            logger.info("Detected hardcoded physics case")
+            # No delay - timing is handled by frontend loading screen (25s)
+            
+            # Return hardcoded physics analysis
+            hardcoded_mistakes = [
+                MistakeAnalysis(
+                    question_number=1,
+                    mistake_description="You incorrectly calculated the efficiency by using kinetic energy (½mv²) instead of gravitational potential energy (mgh) for the useful energy output.",
+                    why_wrong="This is wrong because the tool chest is being lifted at a constant speed, which means its kinetic energy does not change (ΔKE = 0). Since there is no change in kinetic energy, ½mv² cannot be used as the useful energy output. Instead, the useful energy is the increase in gravitational potential energy, E = mgh. By using kinetic energy in the efficiency calculation, the solution applies the wrong type of energy, which leads to an incorrect efficiency value.",
+                    how_to_fix="The correct calculation should use Eout = mgh = (68 kg)(9.8 m/s²)(1.9 m) = 1266.64 J. Then efficiency = (1266.64 J / 2100 J) × 100% = 60.35%.",
+                    weak_area="Energy and Efficiency",
+                    user_answer="5.588%",
+                    correct_answer="60.35%"
+                )
+            ]
+            
+            return AnalysisResponse(
+                test_id=request.test_id,
+                mistakes=hardcoded_mistakes,
+                summary="Analysis complete. You incorrectly calculated the efficiency by using kinetic energy instead of gravitational potential energy. Since the tool chest moves at constant speed, its kinetic energy doesn't change, so the useful energy output is the increase in gravitational potential energy (mgh), not kinetic energy (½mv²). The correct efficiency is 60.35%.",
+                user_answers=request.user_answers,
+                questions={"1": "A technician pulls a 68kg tool chest up a low-friction ramp at a constant speed, increasing its height by 1.9m. If the technician's input is 2,100 J. Determine the efficiency of the energy transformation."}
+            )
+        elif is_math:
+            logger.info("Detected hardcoded math case in analyze-mistakes")
+            # No delay - timing is handled by frontend loading screen (25s)
             
             # Return hardcoded analysis
             hardcoded_mistakes = [
@@ -1128,50 +1186,72 @@ async def generate_practice(request: PracticeRequest):
     Generate practice questions based on identified mistakes
     """
     try:
-        # Check for hardcoded case: trigonometric functions
+        # Check for hardcoded case: trigonometric functions or physics
         mistakes_str = str(request.mistakes or []).lower()
         original_questions_str = str(request.original_questions or {}).lower()
         
-        if ("cos" in mistakes_str or "cos" in original_questions_str or 
+        is_physics_practice = ("efficiency" in mistakes_str or "efficiency" in original_questions_str or
+                              "energy" in mistakes_str or "energy" in original_questions_str or
+                              "68kg" in mistakes_str or "68kg" in original_questions_str or
+                              "tool chest" in mistakes_str or "tool chest" in original_questions_str)
+        
+        is_math_practice = ("cos" in mistakes_str or "cos" in original_questions_str or 
             "theta" in mistakes_str or "theta" in original_questions_str or
-            "trigonometric" in mistakes_str or "trigonometric" in original_questions_str):
-            logger.info("Detected hardcoded case in generate-practice")
-            # Wait 30 seconds to simulate processing
-            await asyncio.sleep(30)
+            "trigonometric" in mistakes_str or "trigonometric" in original_questions_str)
+        
+        if is_physics_practice:
+            logger.info("Detected hardcoded physics practice case")
+            # No delay - timing is handled by frontend (10s loading screen)
             
-            # Return hardcoded practice questions - exact list from user
+            # Return hardcoded physics practice questions
             import uuid
             hardcoded_questions = [
                 PracticeQuestion(
                     id=str(uuid.uuid4()),
-                    question_text="\\csc\\left(\\sin^{-1}\\left(\\frac{2}{3}\\right) + \\frac{\\pi}{3}\\right)",
+                    question_text="\\text{A 40 kg crate is lifted vertically at constant speed to a height of 3.0 m using 1800 J of energy. What is the efficiency of the lifting process?}",
                     difficulty="medium",
-                    topic="Trigonometric Functions",
-                    correct_answer="\\frac{6}{2\\sqrt{3} + 1}",
+                    topic="Energy and Efficiency",
+                    correct_answer="65.3\\%",
                     solution_steps=[
-                        "Let α = sin⁻¹(2/3), so sin(α) = 2/3",
-                        "Find cos(α) using Pythagorean identity: cos(α) = √(1 - sin²(α)) = √(1 - 4/9) = √(5/9) = √5/3",
-                        "Use sum formula: sin(α + π/3) = sin(α)cos(π/3) + cos(α)sin(π/3)",
-                        "sin(α + π/3) = (2/3)(1/2) + (√5/3)(√3/2) = 1/3 + √15/6",
-                        "csc(α + π/3) = 1/sin(α + π/3)"
+                        "Eout = mgh = (40 kg)(9.8 m/s²)(3.0 m) = 1176 J",
+                        "Efficiency = (Eout / Ein) × 100% = (1176 J / 1800 J) × 100% = 65.3%"
                     ]
                 ),
                 PracticeQuestion(
                     id=str(uuid.uuid4()),
-                    question_text="\\tan\\left(\\cos^{-1}\\left(-\\frac{2}{3}\\right) + \\frac{\\pi}{6}\\right)",
+                    question_text="\\text{A 25 kg bucket is raised at constant speed to a height of 5.0 m. If the machine uses 1500 J of energy, find the efficiency.}",
                     difficulty="medium",
-                    topic="Trigonometric Functions",
-                    correct_answer="\\frac{-2\\sqrt{3} + \\sqrt{5}}{2 + 2\\sqrt{15}}",
+                    topic="Energy and Efficiency",
+                    correct_answer="81.7\\%",
                     solution_steps=[
-                        "Let α = cos⁻¹(-2/3), so cos(α) = -2/3",
-                        "Find sin(α) using Pythagorean identity: sin(α) = √(1 - cos²(α)) = √(1 - 4/9) = √(5/9) = √5/3",
-                        "Since cos(α) < 0, α is in QII, so sin(α) > 0",
-                        "Use sum formula: tan(α + π/6) = (tan(α) + tan(π/6))/(1 - tan(α)tan(π/6))",
-                        "tan(α) = sin(α)/cos(α) = (√5/3)/(-2/3) = -√5/2",
-                        "tan(π/6) = 1/√3",
-                        "Substitute and simplify"
+                        "Eout = mgh = (25 kg)(9.8 m/s²)(5.0 m) = 1225 J",
+                        "Efficiency = (Eout / Ein) × 100% = (1225 J / 1500 J) × 100% = 81.7%"
                     ]
                 ),
+                PracticeQuestion(
+                    id=str(uuid.uuid4()),
+                    question_text="\\text{A 60 kg toolbox is lifted straight up at constant speed through 2.5 m using 2200 J of energy. Determine the efficiency.}",
+                    difficulty="medium",
+                    topic="Energy and Efficiency",
+                    correct_answer="66.8\\%",
+                    solution_steps=[
+                        "Eout = mgh = (60 kg)(9.8 m/s²)(2.5 m) = 1470 J",
+                        "Efficiency = (Eout / Ein) × 100% = (1470 J / 2200 J) × 100% = 66.8%"
+                    ]
+                )
+            ]
+            
+            return PracticeResponse(
+                questions=hardcoded_questions,
+                test_id=request.test_id
+            )
+        elif is_math_practice:
+            logger.info("Detected hardcoded case in generate-practice")
+            # No delay - timing is handled by frontend (10s loading screen)
+            
+            # Return hardcoded practice questions with special angles and exact answers
+            import uuid
+            hardcoded_questions = [
                 PracticeQuestion(
                     id=str(uuid.uuid4()),
                     question_text="\\sin\\left(\\tan^{-1}(1) - \\frac{\\pi}{4}\\right)",
@@ -1181,6 +1261,32 @@ async def generate_practice(request: PracticeRequest):
                     solution_steps=[
                         "tan⁻¹(1) = π/4",
                         "sin(π/4 - π/4) = sin(0) = 0"
+                    ]
+                ),
+                PracticeQuestion(
+                    id=str(uuid.uuid4()),
+                    question_text="\\cos\\left(\\tan^{-1}(\\sqrt{3}) - \\frac{\\pi}{6}\\right)",
+                    difficulty="medium",
+                    topic="Trigonometric Functions",
+                    correct_answer="\\frac{\\sqrt{3}}{2}",
+                    solution_steps=[
+                        "tan⁻¹(√3) = π/3",
+                        "cos(π/3 - π/6) = cos(π/6) = √3/2"
+                    ]
+                ),
+                PracticeQuestion(
+                    id=str(uuid.uuid4()),
+                    question_text="\\sec\\left(\\sin^{-1}\\left(-\\frac{1}{2}\\right) + \\frac{\\pi}{3}\\right)",
+                    difficulty="medium",
+                    topic="Trigonometric Functions",
+                    correct_answer="\\frac{2\\sqrt{3}}{3}",
+                    solution_steps=[
+                        "Let α = sin⁻¹(-1/2), so sin(α) = -1/2",
+                        "α = -π/6 (since sin(-π/6) = -1/2)",
+                        "Find cos(α): cos(-π/6) = cos(π/6) = √3/2",
+                        "Use sum formula: cos(α + π/3) = cos(α)cos(π/3) - sin(α)sin(π/3)",
+                        "cos(α + π/3) = (√3/2)(1/2) - (-1/2)(√3/2) = √3/4 + √3/4 = √3/2",
+                        "sec(α + π/3) = 1/cos(α + π/3) = 2/√3 = 2√3/3"
                     ]
                 ),
                 PracticeQuestion(

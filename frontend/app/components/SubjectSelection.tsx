@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import ArrowButton from './ArrowButton'
 
 interface SubjectSelectionProps {
   userName: string
@@ -36,12 +37,12 @@ export default function SubjectSelection({ userName, onSelect }: SubjectSelectio
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4" onKeyPress={handleKeyPress} tabIndex={0}>
-      <div className={`text-center max-w-4xl w-full transition-opacity duration-700 ${fadeIn ? 'opacity-100' : 'opacity-0'}`}>
-        <h1 className="text-5xl md:text-6xl font-light text-black mb-12 tracking-tight">
+      <div className={`text-center max-w-5xl w-full transition-opacity duration-700 ${fadeIn ? 'opacity-100' : 'opacity-0'}`}>
+        <h1 className="text-4xl md:text-6xl lg:text-7xl font-light text-black mb-12 tracking-tight">
           Welcome, {userName}
         </h1>
         
-        <p className="text-xl text-gray-700 font-light mb-12">
+        <p className="text-xl md:text-2xl text-gray-700 font-light mb-12">
           What subject will you need help with today?
         </p>
 
@@ -63,12 +64,9 @@ export default function SubjectSelection({ userName, onSelect }: SubjectSelectio
         </div>
 
         {showNext && (
-          <button
-            onClick={handleNext}
-            className="px-8 py-3 bg-blue-500 text-white rounded-lg text-lg font-medium hover:bg-blue-600 transition-all duration-300 opacity-0 animate-fadeIn"
-          >
-            Next
-          </button>
+          <div className="flex justify-center opacity-0 animate-fadeIn">
+            <ArrowButton onClick={handleNext} />
+          </div>
         )}
       </div>
     </div>
