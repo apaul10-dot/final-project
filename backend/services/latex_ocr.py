@@ -1,60 +1,40 @@
 """
 LaTeX OCR Service using pix2tex
-Enhanced with improved handwriting recognition
 """
 from PIL import Image
-from typing import List, Optional, Dict
+from typing import List, Optional
 import numpy as np
-import asyncio
-import logging
-
-logger = logging.getLogger(__name__)
 
 try:
     import cv2
     HAS_OPENCV = True
 except ImportError:
     HAS_OPENCV = False
-    logger.warning("opencv-python not installed. Image preprocessing will be limited.")
+    print("Warning: opencv-python not installed. Image preprocessing will be limited.")
 
 try:
     from pix2tex.cli import LatexOCR
 except ImportError:
-    logger.warning("pix2tex not installed. Install with: pip install pix2tex[api]")
+    print("Warning: pix2tex not installed. Install with: pip install pix2tex[api]")
     LatexOCR = None
-
-# Import enhanced handwriting reader
-try:
-    from .handwriting_reader import HandwritingReader
-    HAS_HANDWRITING_READER = True
-except ImportError:
-    HAS_HANDWRITING_READER = False
-    logger.warning("HandwritingReader not available")
 
 
 class LatexOCRService:
     """Service for extracting LaTeX equations from images"""
     
-    def __init__(self, ai_client=None):
+    def __init__(self):
         self.model = None
         self.easyocr_reader = None
         self._easyocr_initialized = False
-        self.ai_client = ai_client
         
         if LatexOCR:
             try:
                 self.model = LatexOCR()
             except Exception as e:
-                logger.warning(f"Could not initialize LatexOCR: {e}")
+                print(f"Warning: Could not initialize LatexOCR: {e}")
         
         # Initialize EasyOCR reader (lazy loading)
         self._init_easyocr()
-        
-        # Initialize enhanced handwriting reader
-        if HAS_HANDWRITING_READER:
-            self.handwriting_reader = HandwritingReader()
-        else:
-            self.handwriting_reader = None
     
     def _init_easyocr(self):
         """Initialize EasyOCR reader (only once)"""
@@ -63,16 +43,16 @@ class LatexOCRService:
         
         try:
             import easyocr
-            logger.info("Initializing EasyOCR for handwriting recognition...")
+            print("Initializing EasyOCR for handwriting recognition...")
             # Initialize with English, no GPU, quiet mode
             self.easyocr_reader = easyocr.Reader(['en'], gpu=False, verbose=False)
             self._easyocr_initialized = True
-            logger.info("EasyOCR initialized successfully")
+            print("EasyOCR initialized successfully")
         except ImportError:
-            logger.warning("EasyOCR not installed. Install with: pip install easyocr")
+            print("Warning: EasyOCR not installed. Install with: pip install easyocr")
             self.easyocr_reader = None
         except Exception as e:
-            logger.warning(f"Could not initialize EasyOCR: {e}")
+            print(f"Warning: Could not initialize EasyOCR: {e}")
             self.easyocr_reader = None
     
     def extract_equations(self, image: Image.Image) -> List[str]:
@@ -186,117 +166,69 @@ class LatexOCRService:
             print(f"Error extracting equations from regions: {e}")
             return self.extract_equations(image)
     
-    async def extract_all_content(self, image: Image.Image, timeout: float = 90.0) -> dict:
+    def extract_all_content(self, image: Image.Image) -> dict:
         """
         Extract both equations and text from an image
-        Uses enhanced handwriting recognition with timeout protection
-        
-        Args:
-            image: PIL Image to process
-            timeout: Maximum time to spend on extraction
-            
-        Returns:
-            Dictionary with equations, text, full_content, and metadata
+        Returns a dictionary with equations and text
         """
-        from .timeout_utils import run_with_timeout
-        
         result = {
             "equations": [],
             "text": "",
-            "full_content": "",
-            "confidence": 0.0,
-            "method_used": "unknown"
+            "full_content": ""
         }
         
-        async def extract_task():
-            # Extract equations (synchronous, but wrapped)
-            equations = self.extract_equations(image)
-            result["equations"] = equations
-            
-            # Use enhanced handwriting reader if available
-            if self.handwriting_reader:
-                try:
-                    handwriting_result = await self.handwriting_reader.read_handwriting(
-                        image,
-                        use_ai_interpretation=True,
-                        ai_client=self.ai_client,
-                        timeout=timeout * 0.7
-                    )
-                    
-                    if handwriting_result["text"]:
-                        result["text"] = handwriting_result["text"]
-                        result["confidence"] = handwriting_result["confidence"]
-                        result["method_used"] = handwriting_result["method"]
-                        logger.info(f"Handwriting extraction: {len(handwriting_result['text'])} chars, confidence={handwriting_result['confidence']:.2f}")
-                except Exception as e:
-                    logger.warning(f"Enhanced handwriting reader failed: {e}")
-                    # Fallback to basic methods
-            
-            # Fallback to basic EasyOCR if enhanced reader didn't work
-            if not result["text"] and self.easyocr_reader:
-                try:
-                    processed_img = self._preprocess_image(image, for_handwriting=True)
-                    img_array = np.array(processed_img.convert('RGB'))
-                    text_results = self.easyocr_reader.readtext(img_array)
-                    
-                    text_parts = []
-                    confidences = []
-                    for (bbox, text, confidence) in text_results:
-                        if confidence > 0.2:
-                            text_parts.append(text.strip())
-                            confidences.append(confidence)
-                    
-                    if text_parts:
-                        result["text"] = " ".join(text_parts)
-                        result["confidence"] = sum(confidences) / len(confidences) if confidences else 0.0
-                        result["method_used"] = "easyocr_basic"
-                        logger.info(f"Basic EasyOCR extracted {len(text_parts)} text regions")
-                except Exception as e:
-                    logger.warning(f"Basic EasyOCR failed: {e}")
-            
-            # Final fallback to pytesseract
-            if not result["text"]:
-                try:
-                    import pytesseract
-                    result["text"] = pytesseract.image_to_string(image)
-                    result["method_used"] = "tesseract"
-                except ImportError:
-                    pass
-                except Exception as e:
-                    logger.warning(f"Tesseract error: {e}")
-            
-            # Combine all content
-            all_parts = []
-            if result["text"]:
-                all_parts.append(result["text"])
-            if equations:
-                all_parts.extend(equations)
-            
-            result["full_content"] = " ".join(all_parts) if all_parts else ""
-            return result
+        # Extract equations
+        equations = self.extract_equations(image)
+        result["equations"] = equations
         
-        # Run with timeout protection
-        final_result = await run_with_timeout(
-            extract_task(),
-            timeout=timeout,
-            default_return=result,
-            error_message="Content extraction timed out"
-        )
+        # Try to extract text using EasyOCR (better for handwriting)
+        text_parts = []
         
-        return final_result
-    
-    def extract_all_content_sync(self, image: Image.Image) -> dict:
-        """
-        Synchronous version of extract_all_content (for backward compatibility)
-        """
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+        if self.easyocr_reader:
+            try:
+                # Preprocess image for better handwriting recognition
+                processed_img = self._preprocess_image(image, for_handwriting=True)
+                
+                # Convert to numpy array
+                img_array = np.array(processed_img.convert('RGB'))
+                
+                # Extract text with EasyOCR
+                text_results = self.easyocr_reader.readtext(img_array)
+                
+                # Combine all text with confidence threshold
+                for (bbox, text, confidence) in text_results:
+                    if confidence > 0.2:  # Lower threshold for handwriting (was 0.3)
+                        text_parts.append(text.strip())
+                
+                if text_parts:
+                    result["text"] = " ".join(text_parts)
+                    print(f"EasyOCR extracted {len(text_parts)} text regions")
+            except Exception as e:
+                print(f"EasyOCR extraction error: {e}")
+                import traceback
+                traceback.print_exc()
+                # Continue to fallback
         
-        return loop.run_until_complete(self.extract_all_content(image))
+        # Fallback to pytesseract if EasyOCR didn't work
+        if not text_parts:
+            try:
+                import pytesseract
+                result["text"] = pytesseract.image_to_string(image)
+            except ImportError:
+                pass  # pytesseract not available
+            except Exception as e:
+                print(f"Tesseract error: {e}")
+        
+        # Combine all content
+        all_parts = []
+        if result["text"]:
+            all_parts.append(result["text"])
+        if equations:
+            all_parts.extend(equations)
+        
+        result["full_content"] = " ".join(all_parts) if all_parts else ""
+        
+        return result
 
 
 

@@ -4,7 +4,6 @@ from fastapi.responses import JSONResponse
 from PIL import Image
 import io
 import os
-import asyncio
 from typing import List, Optional
 from pydantic import BaseModel
 import base64
@@ -14,6 +13,7 @@ import json
 from dotenv import load_dotenv
 load_dotenv()
 
+<<<<<<< HEAD
 import logging
 
 # Configure logging first
@@ -52,6 +52,13 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+=======
+from services.latex_ocr import LatexOCRService
+from services.ai_analyzer import AIAnalyzer
+from services.question_generator import QuestionGenerator
+from database.models import init_db, get_db
+from database.schemas import TestSubmission, MistakeAnalysis, PracticeQuestion
+>>>>>>> parent of c53e3aa (Commiting code into github for desktop, ocr not working, math anlyzation not working, need to fix)
 
 app = FastAPI(title="Test Analysis API", version="1.0.0")
 
@@ -64,6 +71,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+<<<<<<< HEAD
 # Initialize services (only if dependencies available)
 if HAS_DEPENDENCIES:
     ai_analyzer = AIAnalyzer()
@@ -77,6 +85,15 @@ else:
     latex_ocr = None
     question_generator = None
     answer_matcher = None
+=======
+# Initialize services
+latex_ocr = LatexOCRService()
+ai_analyzer = AIAnalyzer()
+question_generator = QuestionGenerator()
+
+# Initialize database
+init_db()
+>>>>>>> parent of c53e3aa (Commiting code into github for desktop, ocr not working, math anlyzation not working, need to fix)
 
 
 class ImageUploadResponse(BaseModel):
@@ -92,10 +109,6 @@ class AnalysisResponse(BaseModel):
     test_id: str
     mistakes: List[MistakeAnalysis]
     summary: str
-    user_answers: Optional[dict] = None  # Include extracted answers
-    questions: Optional[dict] = None  # Include extracted questions
-    user_answers: Optional[dict] = None  # Include extracted answers
-    questions: Optional[dict] = None  # Include extracted questions
 
 
 class PracticeResponse(BaseModel):
@@ -151,9 +164,9 @@ async def upload_test(images: List[UploadFile] = File(...), subject: str = Form(
     """
     Upload test images and extract text/equations using OCR
     Also extracts questions and answers from the images using AI
-    Enhanced with timeout protection and improved handwriting recognition
     """
     try:
+<<<<<<< HEAD
         # Hardcoded case: For any screenshot/image uploaded, return hardcoded response (no OCR)
         logger.info(f"Detected image upload - returning hardcoded response. Subject: {subject}")
         # No delay here - goes immediately to fun facts screen (25s delay happens in frontend loading screen)
@@ -189,72 +202,36 @@ async def upload_test(images: List[UploadFile] = File(...), subject: str = Form(
         # OLD CODE BELOW - NOT REACHED (kept for reference)
         # Set timeout for entire upload process (2 minutes per image, max 5 minutes total)
         max_total_timeout = min(300.0, 120.0 * len(images))
+=======
+        extracted_content = []
+        all_equations = []
+        all_text_content = []
+>>>>>>> parent of c53e3aa (Commiting code into github for desktop, ocr not working, math anlyzation not working, need to fix)
         
-        async def process_images():
-            extracted_content = []
-            all_equations = []
-            all_text_content = []
+        # Process each image
+        for image in images:
+            # Read image
+            image_data = await image.read()
+            img = Image.open(io.BytesIO(image_data))
             
-            # Process each image with timeout protection
-            for idx, image in enumerate(images):
-                logger.info(f"Processing image {idx + 1}/{len(images)}: {image.filename}")
-                
-                try:
-                    # Read image
-                    image_data = await image.read()
-                    img = Image.open(io.BytesIO(image_data))
-                    
-                    # Extract all content with timeout (90 seconds per image)
-                    content = await run_with_timeout(
-                        latex_ocr.extract_all_content(img, timeout=90.0),
-                        timeout=90.0,
-                        default_return={"equations": [], "text": "", "full_content": ""},
-                        error_message=f"Image {idx + 1} extraction timed out"
-                    )
-                    
-                    all_equations.extend(content.get("equations", []))
-                    
-                    # Also try to extract equations from bottom region
-                    try:
-                        bottom_equations = latex_ocr.extract_equations_from_regions(img)
-                        all_equations.extend(bottom_equations)
-                    except Exception as e:
-                        logger.warning(f"Bottom region extraction failed: {e}")
-                    
-                    if content.get("full_content"):
-                        all_text_content.append(content["full_content"])
-                        logger.info(f"Extracted {len(content.get('full_content', ''))} chars from image {idx + 1}")
-                    
-                    # Store extracted content
-                    extracted_content.append({
-                        "filename": image.filename,
-                        "equations": content.get("equations", []),
-                        "text": content.get("text", ""),
-                        "full_content": content.get("full_content", ""),
-                        "confidence": content.get("confidence", 0.0),
-                        "method": content.get("method_used", "unknown")
-                    })
-                
-                except Exception as e:
-                    logger.error(f"Error processing image {idx + 1}: {e}")
-                    # Continue with other images
-                    extracted_content.append({
-                        "filename": image.filename,
-                        "equations": [],
-                        "text": "",
-                        "full_content": "",
-                        "error": str(e)
-                    })
+            # Extract all content (equations + text)
+            content = latex_ocr.extract_all_content(img)
+            all_equations.extend(content["equations"])
             
-            return extracted_content, all_equations, all_text_content
-        
-        # Run with overall timeout
-        extracted_content, all_equations, all_text_content = await run_with_timeout(
-            process_images(),
-            timeout=max_total_timeout,
-            default_return=([], [], []),
-            error_message="Image upload and processing timed out"
-        )
+            # Also try to extract equations from bottom region (where final answers often are)
+            bottom_equations = latex_ocr.extract_equations_from_regions(img)
+            all_equations.extend(bottom_equations)
+            
+            if content["full_content"]:
+                all_text_content.append(content["full_content"])
+            
+            # Store extracted content
+            extracted_content.append({
+                "filename": image.filename,
+                "equations": content["equations"],
+                "text": content["text"],
+                "full_content": content["full_content"]
+            })
         
         # Generate test ID
         import uuid
@@ -263,308 +240,99 @@ async def upload_test(images: List[UploadFile] = File(...), subject: str = Form(
         # Use AI to parse questions and answers from extracted content
         combined_content = "\n\n".join(all_text_content)
         
-        # Log what we extracted for debugging
-        logger.info(f"Extracted content length: {len(combined_content)} characters")
-        if len(combined_content) > 0:
-            logger.info(f"First 200 chars: {combined_content[:200]}")
-        else:
-            logger.warning("No text content extracted from images!")
-        
-        # Clean up garbled LaTeX/OCR output - remove obviously corrupted patterns
-        if combined_content:
-            import re
-            # Remove very garbled LaTeX patterns that are likely OCR errors
-            # Keep mathematical expressions but remove noise
-            lines = combined_content.split('\n')
-            cleaned_lines = []
-            for line in lines:
-                # Skip lines that are mostly garbled LaTeX noise
-                if re.search(r'\\begin\{array\}.*\\end\{array\}', line) and len(line) > 200:
-                    # This is likely garbled - try to extract any readable parts
-                    # Look for question numbers or answers within
-                    q_match = re.search(r'[Qq]\s*(\d+)', line)
-                    if q_match:
-                        cleaned_lines.append(f"Q{q_match.group(1)}")
-                    # Look for set notation
-                    set_match = re.search(r'\{[^}]*[∈|≠][^}]*\}', line)
-                    if set_match:
-                        cleaned_lines.append(set_match.group(0))
-                    # Look for constraints
-                    constraint_match = re.search(r'[a-z]\s*≠\s*[^,\n]+', line, re.IGNORECASE)
-                    if constraint_match:
-                        cleaned_lines.append(constraint_match.group(0))
-                else:
-                    cleaned_lines.append(line)
-            combined_content = "\n".join(cleaned_lines)
-        
         # If we have content, use AI to extract Q&A pairs
         user_answers = {}
         questions = {}
         
-        # ALWAYS try extraction - even with minimal content, we can find answers
-        # Lower threshold significantly - even 5 characters might have a question number
-        if combined_content.strip() and len(combined_content.strip()) > 5:
+        if combined_content.strip():
             try:
                 # Use Groq to parse the test and extract questions and answers
                 parse_prompt = f"""Analyze this test image content and extract all questions and their corresponding answers.
 
-CRITICAL INTELLIGENCE: The student's FINAL ANSWER is ALWAYS the LAST part of their work for each question. 
-
-GRADE 12 ONTARIO MATH COMPREHENSION: You understand advanced mathematical concepts including:
-- **Functions**: f(x), g(x), composition (f∘g)(x), domain/range, transformations, inverse functions
-- **Logarithms**: log(x), ln(x), log_b(x), logarithmic equations like log(x) = 2 → x = 10^2 = 100
-- **Exponentials**: 2^x, e^x, exponential equations like 2^x = 8 → x = 3, growth/decay models
-- **Equation Solving**: Quadratic, rational, radical, logarithmic, exponential equations
-- **Advanced Algebra**: Polynomial functions, rational functions, radical functions, trigonometric functions
-
-For EACH question, identify:
-1. Where the question starts (Q1, Q2, Q9a, Q9b, etc.)
-2. ALL the work/steps the student wrote for that question
-3. The VERY LAST thing written for that question - THIS IS THE ANSWER
-
-The final answer can appear as:
-- **The last line of work** - Usually the final value or expression
-- **After the last equals sign** - The value after "=" in the last calculation
-- **Boxed content** - Answers drawn in boxes (almost always final answers)
-- **Checkmarked content** - Answers with checkmarks (✓) nearby
-- **Set notation** - {{x ∈ ℝ | x ≠ -1}} or {{x | x ≠ -1}}
-- **Mathematical constraints** - "x ≠ -1", "x ≠ 2 + 4k, k ∈ ℤ"
-- **Final expression** - The last mathematical expression written
-- **Logarithmic answers** - "x = log(5)" or "x = ln(3)" or "x = 2" (from log equation)
-- **Exponential answers** - "x = 3" (from 2^x = 8) or "x = e^2"
-- **Function answers** - Domain/range, function values, compositions
+IMPORTANT: The student's work may show steps, calculations, or work. The FINAL ANSWER is usually:
+- The last thing written after all the work
+- The value after an equals sign (=) at the end
+- The final result of calculations shown
+- The conclusion or solution at the end of their work
 
 Content from test image:
 {combined_content}
 
-EXTRACTION STRATEGY:
-1. Split the content by question numbers (Q1, Q2, Q9a, Q9b, etc.)
-2. For EACH question, find ALL work lines associated with it
-3. Look at the LAST 3-5 lines of work for that question
-4. The answer is almost always:
-   - The last non-empty line
-   - The value after the last "="
-   - The last mathematical expression
-   - The last set notation or constraint
-5. For multi-part questions (Q9a, Q9b, Q9c), treat each part separately
+For each question, extract:
+1. Question number and question text
+2. The student's FINAL ANSWER (extract from their work/steps - look for the final result, not intermediate steps)
 
-IMPORTANT RULES:
-- Extract the LAST part of work for each question - that's the answer
-- Ignore intermediate steps - only the final result matters
-- If you see work like "2x + 3 = 7, so x = 2", the answer is "2" or "x = 2"
-- If you see "x ≠ -1" at the end, that's the answer
-- If you see "{{x ∈ ℝ | x ≠ -1}}" at the end, that's the answer
-- Be intelligent - the answer is always the conclusion of their work
+Look for patterns like:
+- Question 1: [question text]
+  [student's work/steps]
+  = [final answer]  <- This is what we want
+  
+- Or just the final value/expression at the end of their work
 
 Return as JSON:
 {{
     "questions": {{
-        "9a": "domain of (f/g)(x)",
-        "9b": "domain of (g/f)(x)",
-        "9c": "domain and range of f * g"
+        "1": "question text here",
+        "2": "question text here"
     }},
     "user_answers": {{
-        "9a": "{{x ∈ ℝ | x ≠ -1}}",
-        "9b": "x ≠ -1, x ≠ 2 + 4k, x ≠ 3 + 4k, k ∈ ℤ",
-        "9c": "extracted answer"
+        "1": "final answer extracted from student's work",
+        "2": "final answer extracted from student's work"
     }}
 }}
 
-IMPORTANT: 
-- Extract answers even if OCR text is garbled - try to interpret mathematical notation
-- If you see set notation like {{x ∈ ℝ | ...}}, extract it exactly
-- If you see constraints like "x ≠ -1", extract them
-- For multi-part questions, use question numbers like "9a", "9b", "9c"
-- Be aggressive - if something looks like a final answer (boxed, checkmarked, or at the end), extract it"""
+Even if there's no explicit "Answer:" label, extract the final result from their work. If you see work/steps, the answer is usually the last value or expression written."""
                 
                 if ai_analyzer.use_groq:
-                    # Use timeout protection for AI calls
-                    async def parse_with_ai():
-                        try:
-                            loop = asyncio.get_running_loop()
-                        except RuntimeError:
-                            loop = asyncio.get_event_loop()
-                        response = await loop.run_in_executor(
-                            None,
-                            lambda: ai_analyzer.client.chat.completions.create(
+                    response = ai_analyzer.client.chat.completions.create(
                         model="llama-3.3-70b-versatile",
                         messages=[
-                                    {"role": "system", "content": "You are an expert at parsing handwritten Grade 12 Ontario math tests. You understand functions, logarithms, exponentials, equation solving, and advanced algebra. Your job is to find the FINAL ANSWER for each question, which is ALWAYS the LAST part of the student's work. For each question, identify all work lines, then extract the LAST line or LAST expression as the answer. Look for: the last value after =, logarithmic/exponential solutions, function values, domain/range, set notation, or constraints. Handle multi-part questions (9a, 9b, 9c) separately. Always return valid JSON, even if OCR text is garbled - interpret mathematical notation intelligently."},
+                            {"role": "system", "content": "You are an expert at parsing test images. Extract questions and FINAL ANSWERS from student work. Look for the last value/expression written, not intermediate steps. Always return valid JSON."},
                             {"role": "user", "content": parse_prompt}
                         ],
                         temperature=0.2,  # Lower temperature for more consistent extraction
                         response_format={"type": "json_object"}
                     )
-                        )
-                        return response
-                    
-                    response = await run_with_timeout(
-                        parse_with_ai(),
-                        timeout=45.0,
-                        default_return=None,
-                        error_message="AI parsing timed out"
-                    )
-                    
-                    if not response:
-                        raise Exception("AI parsing failed or timed out")
                     parsed = json.loads(response.choices[0].message.content)
                     questions = parsed.get("questions", {})
                     user_answers = parsed.get("user_answers", {})
                     
-                    # Verify and improve extracted answers using answer matcher
-                    if user_answers and answer_matcher.ai_client:
-                        try:
-                            logger.info(f"Verifying {len(user_answers)} extracted answers...")
-                            verification_results = await run_with_timeout(
-                                answer_matcher.verify_all_answers(
-                                    user_answers,
-                                    questions,
-                                    correct_answers=None,
-                                    timeout_per_answer=10.0
-                                ),
-                                timeout=min(60.0, 10.0 * len(user_answers)),
-                                default_return={},
-                                error_message="Answer verification timed out"
-                            )
-                            
-                            # Update answers with verified versions if confidence improved
-                            for q_num, verification in verification_results.items():
-                                if verification.get("confidence", 0.0) > 0.5:
-                                    verified = verification.get("verified_answer", "")
-                                    if verified and len(verified) > 0:
-                                        user_answers[q_num] = verified
-                                        logger.info(f"Verified answer for Q{q_num}: confidence={verification.get('confidence', 0.0):.2f}")
-                        except Exception as e:
-                            logger.warning(f"Answer verification failed: {e}")
-                    
-                    # If still no answers, try a more aggressive extraction (even with minimal content)
-                    if len(user_answers) == 0 and len(combined_content.strip()) > 5:
+                    # If still no answers, try a more aggressive extraction
+                    if len(user_answers) == 0 and len(combined_content) > 50:
                         # Try to extract any final values/expressions
-                        fallback_prompt = f"""Look at this test content VERY carefully. The student HAS provided answers - find them!
+                        fallback_prompt = f"""Look at this test content more carefully. Extract ANY final answers or results, even if they're embedded in work.
 
 Content: {combined_content}
 
-Look for:
-1. **Boxed content** - anything that appears to be in a box (often final answers)
-2. **Checkmarks** - content with checkmarks (✓) nearby
-3. **Set notation** - patterns like {{x ∈ ℝ | ...}} or {{x | ...}}
-4. **Mathematical constraints** - "x ≠ -1", "x ≠ 2 + 4k", etc.
-5. **Values after equals signs** - especially at the end of lines
-6. **Last expressions** - the final mathematical expression written
-7. **Question parts** - look for "a.", "b.", "c." after question numbers
-
-Even if the OCR text is garbled or unclear, try to identify:
-- Question numbers (Q9, 9a, 9b, etc.)
-- Mathematical expressions that look like answers
-- Set notation or constraints
-- Any content that appears to be a final answer
+Find any numbers, expressions, or values that look like final answers (usually at the end of lines, after =, or the last thing written).
 
 Return as JSON with user_answers containing question numbers and their final answers:
 {{
     "user_answers": {{
-        "9a": "extracted answer for part a",
-        "9b": "extracted answer for part b",
-        "9c": "extracted answer for part c"
+        "1": "extracted final answer",
+        "2": "extracted final answer"
     }}
-}}
-
-Be VERY aggressive - extract anything that could be an answer, even if you're not 100% sure."""
+}}"""
                         
                         try:
-                            async def fallback_parse():
-                                try:
-                                    loop = asyncio.get_running_loop()
-                                except RuntimeError:
-                                    loop = asyncio.get_event_loop()
-                                return await loop.run_in_executor(
-                                    None,
-                                    lambda: ai_analyzer.client.chat.completions.create(
+                            fallback_response = ai_analyzer.client.chat.completions.create(
                                 model="llama-3.3-70b-versatile",
                                 messages=[
-                                            {"role": "system", "content": "Extract final answers from student work. Be VERY aggressive - look for boxed answers, checkmarks, set notation, mathematical constraints, and any content that looks like a final answer. Handle garbled OCR text by interpreting mathematical notation."},
+                                    {"role": "system", "content": "Extract final answers from student work. Be aggressive - find any values that could be answers."},
                                     {"role": "user", "content": fallback_prompt}
                                 ],
                                 temperature=0.3,
                                 response_format={"type": "json_object"}
                             )
-                                )
-                            
-                            fallback_response = await run_with_timeout(
-                                fallback_parse(),
-                                timeout=30.0,
-                                default_return=None,
-                                error_message="Fallback parsing timed out"
-                            )
-                            
-                            if fallback_response:
-                                fallback_parsed = json.loads(fallback_response.choices[0].message.content)
-                                fallback_answers = fallback_parsed.get("user_answers", {})
-                                if fallback_answers:
-                                    user_answers = fallback_answers
-                                    logger.info(f"Fallback extraction found {len(user_answers)} answers")
-                        except Exception as e:
-                            logger.warning(f"Fallback extraction failed: {e}")
-                    
-                    # If we still have no answers but have content, try one more time with minimal requirements
-                    if len(user_answers) == 0 and len(combined_content.strip()) > 5:
-                        logger.info("Trying final aggressive extraction with minimal content...")
-                        try:
-                            minimal_prompt = f"""This is OCR text from a handwritten math test. Extract ANY answers you can find, even if the text is garbled.
-
-Content: {combined_content[:1000]}
-
-Look for:
-- Question numbers (Q9, 9a, 9b, 1, 2, etc.)
-- Any mathematical expressions
-- Set notation patterns
-- Constraint patterns (x not equal, x ≠, etc.)
-- Numbers or expressions at the end of lines
-
-Return JSON with user_answers:
-{{
-    "user_answers": {{
-        "9a": "any answer found",
-        "9b": "any answer found"
-    }}
-}}"""
-                            
-                            async def minimal_parse():
-                                try:
-                                    loop = asyncio.get_running_loop()
-                                except RuntimeError:
-                                    loop = asyncio.get_event_loop()
-                                return await loop.run_in_executor(
-                                    None,
-                                    lambda: ai_analyzer.client.chat.completions.create(
-                                        model="llama-3.3-70b-versatile",
-                                        messages=[
-                                            {"role": "system", "content": "Extract answers from OCR text. Be extremely aggressive - find ANY mathematical expressions, numbers, or constraints that could be answers. Even if text is garbled, interpret it."},
-                                            {"role": "user", "content": minimal_prompt}
-                                        ],
-                                        temperature=0.4,
-                                        response_format={"type": "json_object"}
-                                    )
-                                )
-                            
-                            minimal_response = await run_with_timeout(
-                                minimal_parse(),
-                                timeout=30.0,
-                                default_return=None,
-                                error_message="Minimal extraction timed out"
-                            )
-                            
-                            if minimal_response:
-                                minimal_parsed = json.loads(minimal_response.choices[0].message.content)
-                                minimal_answers = minimal_parsed.get("user_answers", {})
-                                if minimal_answers:
-                                    user_answers = minimal_answers
-                                    logger.info(f"Minimal extraction found {len(user_answers)} answers")
-                        except Exception as e:
-                            logger.warning(f"Minimal extraction failed: {e}")
+                            fallback_parsed = json.loads(fallback_response.choices[0].message.content)
+                            fallback_answers = fallback_parsed.get("user_answers", {})
+                            if fallback_answers:
+                                user_answers = fallback_answers
+                                print(f"Fallback extraction found {len(user_answers)} answers")
+                        except:
+                            pass
             except Exception as e:
-                logger.error(f"Error parsing test content with AI: {e}")
-                import traceback
-                logger.error(f"Traceback: {traceback.format_exc()}")
+                print(f"Error parsing test content with AI: {e}")
                 # Fallback: try to extract basic patterns
                 # Look for common patterns like "Q1:", "Question 1:", "1.", etc.
                 import re
@@ -573,46 +341,30 @@ Return JSON with user_answers:
                 q_work_lines = {}  # Store work lines for each question
                 
                 for i, line in enumerate(lines):
-                    # Look for question patterns (including multi-part: Q9a, 9a, etc.)
-                    q_match = re.search(r'(?:Q|Question|Problem|#)?\s*(\d+)([a-z])?[\.:\)]\s*(.+)', line, re.IGNORECASE)
+                    # Look for question patterns
+                    q_match = re.search(r'(?:Q|Question|Problem|#)?\s*(\d+)[\.:\)]\s*(.+)', line, re.IGNORECASE)
                     if q_match:
-                        q_num = q_match.group(1)
-                        q_part = q_match.group(2) if q_match.group(2) else ""
-                        q_text = q_match.group(3) if q_match.group(3) else ""
-                        
-                        # Combine number and part (e.g., "9a", "9b")
-                        full_q_num = q_num + q_part.lower() if q_part else q_num
                         # If we had a previous question, extract final answer from its work
                         if current_q and current_q in q_work_lines:
                             work = q_work_lines[current_q]
-                            # Look for final answer patterns
+                            # Look for final answer patterns: = value, or last number/expression
                             final_ans = None
                             for work_line in reversed(work):
-                                # Look for set notation {x ∈ ℝ | ...}
-                                set_match = re.search(r'\{[^}]*\}', work_line)
-                                if set_match:
-                                    final_ans = set_match.group(0).strip()
-                                    break
                                 # Look for = pattern (final answer)
                                 eq_match = re.search(r'=\s*(.+)$', work_line)
                                 if eq_match:
                                     final_ans = eq_match.group(1).strip()
                                     break
                                 # Look for variable = value (e.g., x = 2)
-                                var_match = re.search(r'([a-z])\s*[≠=]\s*(.+)$', work_line, re.IGNORECASE)
+                                var_match = re.search(r'([a-z])\s*=\s*(.+)$', work_line, re.IGNORECASE)
                                 if var_match:
-                                    final_ans = var_match.group(0).strip()
-                                    break
-                                # Look for constraints (x ≠ -1, etc.)
-                                constraint_match = re.search(r'[a-z]\s*≠\s*[^,\n]+', work_line, re.IGNORECASE)
-                                if constraint_match:
-                                    final_ans = constraint_match.group(0).strip()
+                                    final_ans = var_match.group(2).strip()
                                     break
                             if final_ans:
                                 user_answers[current_q] = final_ans
                         
-                        current_q = full_q_num
-                        questions[current_q] = q_text.strip() if q_text else f"Question {full_q_num}"
+                        current_q = q_match.group(1)
+                        questions[current_q] = q_match.group(2).strip()
                         q_work_lines[current_q] = []
                     # Look for explicit answer patterns
                     elif current_q and re.search(r'(?:A|Answer|Ans)[\.:\)]\s*(.+)', line, re.IGNORECASE):
@@ -627,123 +379,14 @@ Return JSON with user_answers:
                 if current_q and current_q in q_work_lines:
                     work = q_work_lines[current_q]
                     for work_line in reversed(work):
-                        # Look for set notation first
-                        set_match = re.search(r'\{[^}]*\}', work_line)
-                        if set_match:
-                            user_answers[current_q] = set_match.group(0).strip()
-                            break
-                        # Look for constraints
-                        constraint_match = re.search(r'[a-z]\s*≠\s*[^,\n]+', work_line, re.IGNORECASE)
-                        if constraint_match:
-                            user_answers[current_q] = constraint_match.group(0).strip()
-                            break
-                        # Look for = pattern
                         eq_match = re.search(r'=\s*(.+)$', work_line)
                         if eq_match:
                             user_answers[current_q] = eq_match.group(1).strip()
                             break
-                        # Look for variable = value
-                        var_match = re.search(r'([a-z])\s*[≠=]\s*(.+)$', work_line, re.IGNORECASE)
+                        var_match = re.search(r'([a-z])\s*=\s*(.+)$', work_line, re.IGNORECASE)
                         if var_match:
-                            user_answers[current_q] = var_match.group(0).strip()
+                            user_answers[current_q] = var_match.group(2).strip()
                             break
-        
-        # FINAL FALLBACK: If we still have no answers but have ANY content, try one last desperate attempt
-        if len(user_answers) == 0 and len(combined_content.strip()) > 5:
-            logger.info("FINAL FALLBACK: Trying desperate extraction from any content...")
-            try:
-                # Use AI one more time with a very simple, direct prompt
-                desperate_prompt = f"""This is OCR text from a handwritten math test. Extract ANY answers you can find.
-
-Content: {combined_content[:2000]}
-
-Find question numbers and extract the LAST thing written for each question as the answer.
-
-Return JSON:
-{{
-    "user_answers": {{
-        "9a": "any answer found",
-        "9b": "any answer found"
-    }}
-}}
-
-Be EXTREMELY aggressive - extract anything that could be an answer!"""
-                
-                async def desperate_parse():
-                    try:
-                        loop = asyncio.get_running_loop()
-                    except RuntimeError:
-                        loop = asyncio.get_event_loop()
-                    return await loop.run_in_executor(
-                        None,
-                        lambda: ai_analyzer.client.chat.completions.create(
-                            model="llama-3.3-70b-versatile",
-                            messages=[
-                                {"role": "system", "content": "Extract answers from OCR text. Be EXTREMELY aggressive - find ANY mathematical content, numbers, expressions, or constraints that could be answers. Extract the last thing mentioned for each question."},
-                                {"role": "user", "content": desperate_prompt}
-                            ],
-                            temperature=0.4,
-                            response_format={"type": "json_object"}
-                        )
-                    )
-                
-                desperate_response = await run_with_timeout(
-                    desperate_parse(),
-                    timeout=30.0,
-                    default_return=None,
-                    error_message="Desperate extraction timed out"
-                )
-                
-                if desperate_response:
-                    desperate_parsed = json.loads(desperate_response.choices[0].message.content)
-                    desperate_answers = desperate_parsed.get("user_answers", {})
-                    if desperate_answers:
-                        user_answers = desperate_answers
-                        logger.info(f"Desperate extraction found {len(user_answers)} answers!")
-                
-                # Also try simple regex-based extraction as absolute last resort
-                if len(user_answers) == 0:
-                    import re
-                    # Look for question numbers
-                    q_numbers = re.findall(r'[Qq]?\s*(\d+)([a-z])?', combined_content, re.IGNORECASE)
-                    
-                    if q_numbers:
-                        lines = combined_content.split('\n')
-                        current_q = None
-                        q_work = {}
-                        
-                        for line in lines:
-                            q_match = re.search(r'[Qq]?\s*(\d+)([a-z])?', line, re.IGNORECASE)
-                            if q_match:
-                                q_num = q_match.group(1)
-                                q_part = q_match.group(2) if q_match.group(2) else ""
-                                current_q = q_num + q_part.lower() if q_part else q_num
-                                q_work[current_q] = []
-                            elif current_q and line.strip():
-                                q_work[current_q].append(line.strip())
-                        
-                        # Extract last line for each question
-                        for q_num, work_lines in q_work.items():
-                            if work_lines:
-                                for line in reversed(work_lines):
-                                    if line.strip() and len(line.strip()) > 2:
-                                        user_answers[q_num] = line.strip()
-                                        logger.info(f"Regex extraction: Q{q_num} = {line.strip()[:50]}")
-                                        break
-                        
-                        if user_answers:
-                            logger.info(f"Regex extraction found {len(user_answers)} answers!")
-            except Exception as e:
-                logger.warning(f"Desperate extraction failed: {e}")
-        
-        # Log final results
-        logger.info(f"Final extraction: {len(questions)} questions, {len(user_answers)} answers")
-        if len(user_answers) == 0:
-            logger.warning("No answers extracted! Content length was: " + str(len(combined_content)))
-            if len(combined_content) < 50:
-                logger.warning("Content is very short - OCR may not have extracted enough text")
-            # Even if no answers, return the extracted text so user can see what was extracted
-            logger.info("Returning response with extracted text for user review")
         
         return ImageUploadResponse(
             test_id=test_id,
@@ -751,13 +394,12 @@ Be EXTREMELY aggressive - extract anything that could be an answer!"""
             equations=all_equations,
             user_answers=user_answers,
             questions=questions,
-            message="Test uploaded and parsed successfully" if user_answers else f"Test uploaded. Extracted {len(combined_content)} characters of text. Please use the 'Analyze Text' feature below to paste and analyze the content if answers weren't automatically extracted."
+            message="Test uploaded and parsed successfully"
         )
     
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
-        logger.error(f"Upload error: {error_trace}")
         print(f"Upload error: {error_trace}")
         
         # Provide more helpful error messages
@@ -768,11 +410,6 @@ Be EXTREMELY aggressive - extract anything that could be an answer!"""
             error_msg = "Error processing image. Please ensure the file is a valid image format."
         elif "groq" in error_msg.lower() or "api" in error_msg.lower():
             error_msg = "Error connecting to AI service. Please check your API configuration."
-        elif "timeout" in error_msg.lower():
-            error_msg = "Processing timed out. Please try with a smaller image or fewer images."
-        else:
-            # Include the actual error for debugging
-            error_msg = f"Error processing upload: {error_msg}"
         
         raise HTTPException(status_code=500, detail=error_msg)
 
@@ -803,6 +440,7 @@ async def analyze_mistakes(request: AnalyzeRequest):
                 summary="No answers provided for analysis. Please make sure your test images contain visible answers."
             )
         
+<<<<<<< HEAD
         # Check for hardcoded cases
         user_answers_str = str(request.user_answers).lower()
         questions_str = str(request.questions or {}).lower() + " " + str(request.user_answers).lower()
@@ -876,13 +514,13 @@ async def analyze_mistakes(request: AnalyzeRequest):
         # Use AI to analyze mistakes with timeout protection
         analysis = await run_with_timeout(
             ai_analyzer.analyze_mistakes(
+=======
+        # Use AI to analyze mistakes
+        analysis = await ai_analyzer.analyze_mistakes(
+>>>>>>> parent of c53e3aa (Commiting code into github for desktop, ocr not working, math anlyzation not working, need to fix)
             test_id=request.test_id,
             user_answers=request.user_answers,
             correct_answers=request.correct_answers
-            ),
-            timeout=60.0,
-            default_return={"mistakes": [], "summary": "Analysis timed out. Please try again."},
-            error_message="Mistake analysis timed out"
         )
         
         # Ensure we have valid data
@@ -911,90 +549,34 @@ async def analyze_text(request: AnalyzeTextRequest):
     if not request.text or not request.text.strip():
         raise HTTPException(status_code=400, detail="No text provided for analysis")
 
-    try:
-        if not ai_analyzer.use_groq:
-            raise HTTPException(status_code=500, detail="AI service not configured. Please set GROQ_API_KEY")
+    extract_prompt = f"""You are analyzing a student's test that was pasted as text. Your job is to extract ALL questions and the student's FINAL ANSWERS.
 
-        extract_prompt = f"""You are analyzing a student's test that was pasted as text. Your job is to extract ALL questions and the student's FINAL ANSWERS.
+IMPORTANT INSTRUCTIONS:
+1. Extract EVERY question number and its full question text
+2. For each question, find the student's FINAL ANSWER - this could be:
+   - Explicitly stated (e.g., "Answer: 42" or "= 42")
+   - At the end of their work/steps (the last value or expression)
+   - After an equals sign (=) at the conclusion
+   - The result of calculations shown
+   - A conclusion or solution statement
 
-CRITICAL INTELLIGENCE: The student's FINAL ANSWER is ALWAYS the LAST part of their work for each question.
+3. For complex math problems:
+   - Look for the final result after all work is shown
+   - If they show steps like "2x + 3 = 7, so x = 2", the answer is "2" or "x = 2"
+   - If they show a derivative calculation ending with "= 2x", the answer is "2x"
+   - If they solve an equation and end with "x = 3 or x = -1", extract that full answer
 
-GRADE 12 ONTARIO MATH COMPREHENSION: You are excellent at understanding advanced mathematical concepts. When you see:
+4. Be intelligent - even if the answer isn't explicitly labeled, infer it from:
+   - The last line of work for that question
+   - The conclusion of their reasoning
+   - The final value after calculations
+   - Any boxed or highlighted result
 
-**Basic Math:**
-- "2x + 3 = 7" followed by "x = 2", the answer is "2" or "x = 2"
-- "3 + 4 = 7", the answer is "7"
-- Any calculation ending with "= result", extract the result
-
-**Logarithms:**
-- "log(x) = 2" → answer is "x = 100" or "x = 10^2"
-- "ln(x) = 3" → answer is "x = e^3"
-- "log_2(x) = 5" → answer is "x = 32" or "x = 2^5"
-- "log(x + 1) = 2" → answer is "x = 99" or "x = 10^2 - 1"
-- Extract the FINAL value after solving the logarithmic equation
-
-**Exponentials:**
-- "2^x = 8" → answer is "x = 3"
-- "e^x = 5" → answer is "x = ln(5)"
-- "3^(2x) = 9" → answer is "x = 1"
-- "2^(x+1) = 16" → answer is "x = 3"
-- Extract the FINAL value after solving the exponential equation
-
-**Functions:**
-- "f(x) = 2x + 3, find f(5)" → answer is "13" or "f(5) = 13"
-- "(f∘g)(x)" → extract the final composition result
-- Domain/range questions → extract the final domain/range expression
-- "f(x) = x^2, find inverse" → extract the final inverse function
-
-**Derivatives & Calculus:**
-- "d/dx(x^2) = 2x", the answer is "2x"
-- "f'(x) = 3x^2", extract the derivative expression
-
-**Set Notation & Constraints:**
-- "x ≠ -1", this is a constraint answer
-- "{{x ∈ ℝ | x ≠ -1}}", this is set notation answer
-- "x ∈ ℝ, x > 0", extract the constraint
-
-**Advanced Equations:**
-- Quadratic: "x^2 - 5x + 6 = 0" → answer is "x = 2, x = 3" or "{{2, 3}}"
-- Rational: "1/(x-1) = 2" → answer is "x = 1.5" (with domain restrictions)
-- Radical: "√(x+1) = 3" → answer is "x = 8"
-
-For EACH question, identify:
-1. Where the question starts (Q1, Q2, 1., 2., etc.)
-2. ALL the work/steps the student wrote for that question
-3. The VERY LAST thing written for that question - THIS IS THE ANSWER
-
-The final answer can appear as:
-- **The last line of work** - Usually the final value or expression
-- **After the last equals sign** - The value after "=" in the last calculation
-- **Set notation** - {{x ∈ ℝ | x ≠ -1}} or {{x | x ≠ -1}}
-- **Mathematical constraints** - "x ≠ -1", "x ≠ 2 + 4k, k ∈ ℤ"
-- **Final expression** - The last mathematical expression written
-- **Explicitly stated** - "Answer: 42" or "= 42"
-- **Simple calculations** - "3 + 4 = 7" means answer is "7"
-
-EXTRACTION STRATEGY:
-1. Split the content by question numbers
-2. For EACH question, find ALL work lines associated with it
-3. Look at the LAST 3-5 lines of work for that question
-4. The answer is almost always:
-   - The last non-empty line
-   - The value after the last "="
-   - The last mathematical expression
-   - The last set notation or constraint
-   - The result of any calculation
-
-IMPORTANT RULES:
-- Extract the LAST part of work for each question - that's the answer
-- Ignore intermediate steps - only the final result matters
-- If you see work like "2x + 3 = 7, so x = 2", the answer is "2" or "x = 2"
-- If you see "x ≠ -1" at the end, that's the answer
-- If you see "{{x ∈ ℝ | x ≠ -1}}" at the end, that's the answer
-- For simple math like "3 * 4 = 12", extract "12"
-- For derivatives like "d/dx(x^2) = 2x", extract "2x"
-- Be intelligent - the answer is always the conclusion of their work
-- Understand mathematical notation and expressions correctly
+5. Handle various formats:
+   - "Question 1: ... Answer: ..."
+   - "1. ... [work] = [answer]"
+   - "Problem 1: ... Solution: ..."
+   - Just work with a final answer at the end
 
 Return JSON with BOTH questions and answers:
 {{
@@ -1003,21 +585,25 @@ Return JSON with BOTH questions and answers:
     "2": "full question text here"
   }},
   "user_answers": {{
-    "1": "student's final answer (extracted intelligently - the LAST part of work)",
-    "2": "student's final answer (extracted intelligently - the LAST part of work)"
+    "1": "student's final answer (extracted intelligently)",
+    "2": "student's final answer (extracted intelligently)"
   }}
 }}
 
 Pasted test content:
 {request.text}
 
-Extract ALL questions and their corresponding final answers. Be thorough and intelligent about finding answers even if not explicitly stated. Understand the math correctly."""
+Extract ALL questions and their corresponding final answers. Be thorough and intelligent about finding answers even if not explicitly stated."""
+
+    try:
+        if not ai_analyzer.use_groq:
+            raise HTTPException(status_code=500, detail="AI service not configured. Please set GROQ_API_KEY")
 
         # First extraction pass - get questions and answers
         response = ai_analyzer.client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": "You are an expert at parsing Grade 12 Ontario math test content. You understand functions (composition, domain/range, transformations, inverses), logarithms (log, ln, log_b), exponentials (2^x, e^x, growth/decay), equation solving (quadratic, rational, radical, logarithmic, exponential), and advanced algebra. Your job is to find the FINAL ANSWER for each question, which is ALWAYS the LAST part of the student's work. For each question, identify all work lines, then extract the LAST line or LAST expression as the answer. Always return valid JSON with both questions and user_answers."},
+                {"role": "system", "content": "You are an expert at parsing test content. Extract ALL questions and intelligently determine the student's final answers, even from complex math work. Always return valid JSON with both questions and user_answers."},
                 {"role": "user", "content": extract_prompt},
             ],
             temperature=0.2,
@@ -1027,49 +613,32 @@ Extract ALL questions and their corresponding final answers. Be thorough and int
         user_answers = parsed.get("user_answers", {})
         questions = parsed.get("questions", {})
         
-        # If no answers found, try a more aggressive extraction (lower threshold)
-        if not user_answers and len(request.text.strip()) > 10:
-            aggressive_prompt = f"""Look at this test content VERY carefully. The student HAS provided answers - you MUST find them!
-
-CRITICAL: Humans often don't explicitly write "Answer:" - the answer is usually the LAST thing they wrote for each question.
+        # If no answers found, try a more aggressive extraction
+        if not user_answers and len(request.text) > 50:
+            aggressive_prompt = f"""Look at this test content very carefully. The student has provided answers somewhere in their work. Find them.
 
 Content:
 {request.text}
 
-EXTRACTION STRATEGY:
-1. Find ALL question numbers (Q1, Q2, 1., 2., 9a, 9b, etc.)
-2. For EACH question, find ALL the work/steps they wrote
-3. The answer is ALWAYS the LAST line or LAST expression for that question
-4. Look for:
-   - The last value after "="
-   - The last mathematical expression
-   - The last number or formula
-   - The last constraint (x ≠ -1, etc.)
-   - The last set notation {{x ∈ ℝ | ...}}
-
 Even if answers aren't explicitly labeled, extract them from:
-- The LAST line of work for each question
 - Final values after calculations
 - Results at the end of work
 - Values after equals signs
 - Conclusions or solutions
-- ANY mathematical expression at the end
 
 Return JSON:
 {{
   "user_answers": {{
-    "1": "extracted answer (last part of work)",
-    "2": "extracted answer (last part of work)"
+    "1": "extracted answer",
+    "2": "extracted answer"
   }}
-}}
-
-BE VERY AGGRESSIVE - extract the last thing written for each question!"""
+}}"""
             
             try:
                 aggressive_response = ai_analyzer.client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=[
-                        {"role": "system", "content": "Be EXTREMELY aggressive in finding answers. The answer is ALWAYS the LAST part of work for each question. Extract the last value, expression, or result written for each question. Even if it's not labeled, it's the answer."},
+                        {"role": "system", "content": "Be very aggressive in finding answers. Extract any final values, results, or conclusions from the student's work."},
                         {"role": "user", "content": aggressive_prompt},
                     ],
                     temperature=0.3,
@@ -1087,90 +656,27 @@ BE VERY AGGRESSIVE - extract the last thing written for each question!"""
         raise
     except Exception as e:
         import traceback
-        error_trace = traceback.format_exc()
-        print(f"Error extracting from text: {error_trace}")
+        print(f"Error extracting from text: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error extracting answers from text: {str(e)}")
-
-    # Even if no answers found, try one more desperate attempt with regex
-    if not user_answers and len(request.text.strip()) > 5:
-        import re
-        logger.info("No answers from AI, trying regex fallback...")
-        lines = request.text.split('\n')
-        current_q = None
-        q_work = {}
-        
-        for line in lines:
-            # Find question numbers
-            q_match = re.search(r'[Qq]?\s*(\d+)([a-z])?[\.:\)]?\s*', line, re.IGNORECASE)
-            if q_match:
-                q_num = q_match.group(1)
-                q_part = q_match.group(2) if q_match.group(2) else ""
-                current_q = q_num + q_part.lower() if q_part else q_num
-                q_work[current_q] = []
-                # Extract question text
-                q_text = line.replace(q_match.group(0), "").strip()
-                if q_text:
-                    questions[current_q] = q_text
-            elif current_q and line.strip():
-                q_work[current_q].append(line.strip())
-        
-        # Extract last line for each question as answer
-        for q_num, work_lines in q_work.items():
-            if work_lines:
-                # Get the last non-empty line
-                for line in reversed(work_lines):
-                    if line.strip() and len(line.strip()) > 1:
-                        user_answers[q_num] = line.strip()
-                        logger.info(f"Regex fallback extracted Q{q_num}: {line.strip()[:50]}")
-                        break
-        
-        if user_answers:
-            logger.info(f"Regex fallback found {len(user_answers)} answers!")
-            # Now analyze these extracted answers
-            try:
-                analysis = await ai_analyzer.analyze_mistakes(
-                    test_id=request.test_id or "text-analysis",
-                    user_answers=user_answers,
-                    correct_answers=None
-                )
-                return AnalysisResponse(
-                    test_id=request.test_id or "text-analysis",
-                    mistakes=analysis.get("mistakes", []),
-                    summary=analysis.get("summary", "Analysis complete"),
-                    user_answers=user_answers,
-                    questions=questions
-                )
-            except Exception as e:
-                logger.warning(f"Analysis failed after regex extraction: {e}")
 
     if not user_answers:
         return AnalysisResponse(
             test_id=request.test_id or "text-analysis",
             mistakes=[],
-            summary=f"No answers could be extracted from the provided text ({len(request.text)} chars). Please ensure the text includes questions and answers (or work that shows final results).",
-            user_answers={},
-            questions={}
+            summary="No answers could be extracted from the provided text. Please ensure the text includes questions and answers (or work that shows final results)."
         )
 
     # Run analysis on extracted answers
-    try:
-        analysis = await ai_analyzer.analyze_mistakes(
-            test_id=request.test_id or "text-analysis",
-            user_answers=user_answers,
-            correct_answers=None
-        )
-    except Exception as e:
-        import traceback
-        error_trace = traceback.format_exc()
-        print(f"Error analyzing mistakes: {error_trace}")
-        raise HTTPException(status_code=500, detail=f"Error analyzing mistakes: {str(e)}")
+    analysis = await ai_analyzer.analyze_mistakes(
+        test_id=request.test_id or "text-analysis",
+        user_answers=user_answers,
+        correct_answers=None
+    )
 
     return AnalysisResponse(
         test_id=request.test_id or "text-analysis",
         mistakes=analysis.get("mistakes", []),
-        summary=analysis.get("summary", "Analysis complete"),
-        user_answers=user_answers,  # Include extracted answers
-        questions=questions  # Include extracted questions
+        summary=analysis.get("summary", "Analysis complete")
     )
 
 

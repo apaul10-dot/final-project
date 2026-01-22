@@ -48,7 +48,7 @@ export default function ImageUpload({ onUploadComplete }: ImageUploadProps) {
           headers: {
             'Content-Type': 'multipart/form-data',
           },
-          timeout: 120000, // 120 second timeout (2 minutes) for OCR processing
+          timeout: 30000, // 30 second timeout
         }
       )
 

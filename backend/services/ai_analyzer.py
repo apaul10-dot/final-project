@@ -74,20 +74,14 @@ class AIAnalyzer:
         
         try:
             if self.use_groq:
-                import asyncio
-                # Run synchronous API call in executor to make it async-friendly
-                loop = asyncio.get_event_loop()
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: self.client.chat.completions.create(
-                        model="llama-3.3-70b-versatile",
-                        messages=[
-                            {"role": "system", "content": "You are an expert math and physics tutor. Analyze student mistakes and provide detailed feedback. Always return valid JSON with the exact structure requested."},
-                            {"role": "user", "content": prompt}
-                        ],
-                        temperature=0.3,
-                        response_format={"type": "json_object"}
-                    )
+                response = self.client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[
+                        {"role": "system", "content": "You are an expert math and physics tutor. Analyze student mistakes and provide detailed feedback. Always return valid JSON with the exact structure requested."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.3,
+                    response_format={"type": "json_object"}
                 )
                 result = response.choices[0].message.content
             else:
@@ -159,14 +153,7 @@ class AIAnalyzer:
         if not user_answers or len(user_answers) == 0:
             return ""
         
-        prompt = f"""You are analyzing a Grade 12 Ontario math test. You are an expert in:
-- Functions: composition, domain/range, transformations, inverse functions, function operations
-- Logarithms: log(x), ln(x), log_b(x), logarithmic equations, properties of logarithms
-- Exponentials: 2^x, e^x, exponential equations, growth/decay models, exponential functions
-- Equation Solving: quadratic, rational, radical, logarithmic, exponential equations
-- Advanced Algebra: polynomial functions, rational functions, radical functions, trigonometric functions
-
-Analyze the following answers and identify any mistakes.
+        prompt = f"""You are analyzing a student's test. Analyze the following answers and identify any mistakes.
 
 Student's Answers:
 {json.dumps(user_answers, indent=2)}
@@ -178,13 +165,9 @@ Student's Answers:
         else:
             prompt += "\nEven without correct answers provided, analyze each answer for:\n"
             prompt += "- Mathematical errors (wrong calculations, formula mistakes)\n"
-            prompt += "- Conceptual errors (misunderstanding of functions, logarithms, exponentials)\n"
-            prompt += "- Common Grade 12 mistakes:\n"
-            prompt += "  * Logarithm errors: forgetting domain restrictions, incorrect log properties, wrong base conversions\n"
-            prompt += "  * Exponential errors: incorrect exponent rules, domain issues, growth/decay formula mistakes\n"
-            prompt += "  * Function errors: wrong domain/range, incorrect compositions, transformation mistakes\n"
-            prompt += "  * Equation solving errors: extraneous solutions, missing restrictions, algebraic mistakes\n"
-            prompt += "- If an answer looks correct based on Grade 12 Ontario math standards, don't mark it as a mistake."
+            prompt += "- Conceptual errors (misunderstanding of concepts)\n"
+            prompt += "- Common mistakes in the subject area\n"
+            prompt += "If an answer looks correct based on standard knowledge, don't mark it as a mistake."
         
         prompt += """
 For each mistake you identify, provide:
@@ -281,7 +264,7 @@ Return as JSON:
             response = self.client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[
-                    {"role": "system", "content": "You are a Grade 12 Ontario math tutor expert in functions, logarithms, exponentials, and advanced algebra. You provide detailed feedback on student answers, understanding complex mathematical concepts. Always return valid JSON."},
+                    {"role": "system", "content": "You are a math and physics tutor providing detailed feedback on student answers. Always return valid JSON."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.3,

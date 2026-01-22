@@ -45,10 +45,11 @@ export default function MistakeAnalysis({ testData, onAnalysisComplete }: Mistak
       }
 
       // Use extracted answers from testData, or fallback to userAnswers state
-      let answersToUse = Object.keys(testData.user_answers || {}).length > 0 
+      const answersToUse = Object.keys(testData.user_answers || {}).length > 0 
         ? testData.user_answers 
         : userAnswers
 
+<<<<<<< HEAD
       // CRITICAL FIX: If no answers extracted but we have text, automatically extract from text
       if (Object.keys(answersToUse).length === 0 && testData.extracted_text && testData.extracted_text.trim().length > 20) {
         console.log('No answers from upload, automatically extracting from extracted text...')
@@ -108,6 +109,10 @@ export default function MistakeAnalysis({ testData, onAnalysisComplete }: Mistak
         setAnalyzing(false)
         alert('No answers were automatically extracted.')
         return
+=======
+      if (Object.keys(answersToUse).length === 0) {
+        throw new Error('No answers found in the uploaded test images. Please make sure your test images contain visible answers.')
+>>>>>>> parent of c53e3aa (Commiting code into github for desktop, ocr not working, math anlyzation not working, need to fix)
       }
 
       const response = await axios.post('http://localhost:8000/api/analyze-mistakes', {
@@ -175,6 +180,39 @@ export default function MistakeAnalysis({ testData, onAnalysisComplete }: Mistak
     <div className="bg-white rounded-lg shadow-lg p-6">
       <h2 className="text-3xl font-bold mb-6 text-gray-900">Mistake Analysis</h2>
 
+<<<<<<< HEAD
+=======
+      {/* Pasted text analysis */}
+      <div className="mb-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+        <h3 className="font-semibold text-gray-800 mb-2">📋 Paste Test Content (Questions & Answers)</h3>
+        <p className="text-sm text-gray-600 mb-2">
+          Paste your entire test here - questions, work, and answers. The AI will intelligently extract your answers even from complex math problems and work steps.
+        </p>
+        <textarea
+          value={rawText}
+          onChange={(e) => setRawText(e.target.value)}
+          className="w-full border rounded p-2 text-sm h-40 mb-2 font-mono"
+          placeholder={`Example:\n\nQuestion 1: Solve for x: 2x + 3 = 7\n2x + 3 = 7\n2x = 4\nx = 2\n\nQuestion 2: Find the derivative of x²\nf(x) = x²\nf'(x) = 2x\n\nQuestion 3: What is ∫x dx?\n∫x dx = x²/2 + C`}
+        />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleAnalyzeText}
+            disabled={analyzing || !rawText.trim()}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          >
+            {analyzing ? 'Analyzing...' : 'Analyze Pasted Text'}
+          </button>
+          {rawText.trim() && (
+            <span className="text-xs text-gray-500">
+              {rawText.split('\n').length} lines, ~{rawText.length} characters
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-gray-500 mt-2">
+          💡 Tip: You can paste questions with work steps - the AI will find your final answers automatically!
+        </p>
+      </div>
+>>>>>>> parent of c53e3aa (Commiting code into github for desktop, ocr not working, math anlyzation not working, need to fix)
 
       {hasExtractedAnswers && !analyzing && (
         <div className="mb-5 p-5 bg-green-50 rounded-lg border-2 border-green-300">
